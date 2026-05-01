@@ -488,6 +488,25 @@
     margin-top: 8px;
   }
 
+  /* Output step — button + inline popover */
+  .output-btn {
+    width: 100%; padding: 10px 14px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
+    cursor: pointer; display: flex; align-items: center; gap: 7px;
+    transition: border-color 0.2s; text-align: left;
+  }
+  .output-btn:hover { border-color: var(--accent); }
+  .output-btn .chevron { margin-left: auto; color: var(--muted); font-size: 10px; transition: transform 0.15s; }
+  .output-btn.open .chevron { transform: rotate(180deg); }
+  .output-popover {
+    position: absolute; left: 0; right: 0; top: calc(100% + 6px);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px; z-index: 200; box-shadow: 0 12px 40px rgba(0,0,0,0.65);
+    display: none;
+  }
+  .output-popover.open { display: block; }
+
   /* Settings modal */
   .modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.7);
@@ -526,7 +545,6 @@
       <button class="tab active" onclick="switchTab('gemini')">Gemini</button>
       <button class="tab" onclick="switchTab('ollama')">Ollama</button>
       <button class="tab" onclick="switchTab('minnal')">Minnal</button>
-      <button class="tab" onclick="switchTab('output')">Output</button>
     </div>
 
     <!-- Gemini tab -->
@@ -565,59 +583,6 @@
         <input type="password" id="s-minnal-key" placeholder="sk_..." />
       </div>
       <p class="hint">Get your key at <span style="color:var(--accent)">app.minnal.io</span> → Settings → API Keys.</p>
-    </div>
-
-    <!-- Output tab -->
-    <div class="tab-panel" id="tab-output">
-
-      <div class="settings-group-label">Format</div>
-      <div class="format-row">
-        <button class="fmt-pill active" data-fmt="shorts" onclick="setOutputFormat('shorts')">
-          YT Shorts<br><small style="color:var(--muted)">≤ 60s · 9:16</small>
-        </button>
-        <button class="fmt-pill" data-fmt="reels" onclick="setOutputFormat('reels')">
-          Reels<br><small style="color:var(--muted)">≤ 90s · 9:16</small>
-        </button>
-        <button class="fmt-pill" data-fmt="tiktok" onclick="setOutputFormat('tiktok')">
-          TikTok<br><small style="color:var(--muted)">≤ 10 min · 9:16</small>
-        </button>
-      </div>
-
-      <div class="settings-group-label" style="margin-top:16px">Smart Crop</div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="s-smart-crop" checked>
-        Auto-crop landscape footage to 9:16 (face &amp; motion detection)
-      </label>
-
-      <div class="settings-group-label" style="margin-top:16px">Look</div>
-      <div class="preset-row">
-        <button class="preset-pill active" data-preset="natural"   onclick="setPreset('natural')">Natural</button>
-        <button class="preset-pill"        data-preset="vivid"     onclick="setPreset('vivid')">Vivid</button>
-        <button class="preset-pill"        data-preset="cinematic" onclick="setPreset('cinematic')">Cinematic</button>
-        <button class="preset-pill"        data-preset="warm"      onclick="setPreset('warm')">Warm</button>
-        <button class="preset-pill"        data-preset="cool"      onclick="setPreset('cool')">Cool</button>
-        <button class="preset-pill"        data-preset="bwhdr"     onclick="setPreset('bwhdr')">B&amp;W HDR</button>
-      </div>
-
-      <div class="settings-group-label" style="margin-top:16px">Fine-tune</div>
-      <div class="slider-grid">
-        <label>Brightness</label>
-        <input type="range" id="s-brightness" min="-50" max="50" value="0" oninput="syncSlider('brightness',this.value)">
-        <span id="s-brightness-val">0</span>
-
-        <label>Contrast</label>
-        <input type="range" id="s-contrast" min="-50" max="50" value="0" oninput="syncSlider('contrast',this.value)">
-        <span id="s-contrast-val">0</span>
-
-        <label>Saturation</label>
-        <input type="range" id="s-saturation" min="-100" max="50" value="0" oninput="syncSlider('saturation',this.value)">
-        <span id="s-saturation-val">0</span>
-
-        <label>Sharpness</label>
-        <input type="range" id="s-sharpness" min="0" max="100" value="0" oninput="syncSlider('sharpness',this.value)">
-        <span id="s-sharpness-val">0</span>
-      </div>
-
     </div>
 
     <div class="modal-actions">
@@ -671,8 +636,72 @@
       <div class="video-list" id="videoList"></div>
     </div>
 
+    <!-- Step 04 — Output settings (popover) -->
+    <div style="position:relative" id="outputStep">
+      <div class="section-label">04 — Output</div>
+      <button class="output-btn" id="outputToggleBtn" onclick="toggleOutputPopover()">
+        <span>📐</span>
+        <span id="opFormatLabel">YT Shorts</span>
+        <span style="color:var(--muted)">·</span>
+        <span id="opLookLabel">Natural</span>
+        <span id="opCropLabel" style="color:var(--muted);font-size:11px"> · Crop ✓</span>
+        <span class="chevron">▾</span>
+      </button>
+
+      <div class="output-popover" id="outputPopover">
+
+        <div class="settings-group-label">Format</div>
+        <div class="format-row">
+          <button class="fmt-pill active" data-fmt="shorts" onclick="setOutputFormat('shorts')">
+            YT Shorts<br><small style="color:var(--muted)">≤ 60s · 9:16</small>
+          </button>
+          <button class="fmt-pill" data-fmt="reels" onclick="setOutputFormat('reels')">
+            Reels<br><small style="color:var(--muted)">≤ 90s · 9:16</small>
+          </button>
+          <button class="fmt-pill" data-fmt="tiktok" onclick="setOutputFormat('tiktok')">
+            TikTok<br><small style="color:var(--muted)">≤ 10 min · 9:16</small>
+          </button>
+        </div>
+
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:14px">
+          <input type="checkbox" id="op-smart-crop" checked onchange="saveOutputSettings()">
+          Smart crop to 9:16 (face &amp; motion)
+        </label>
+
+        <div class="settings-group-label" style="margin-top:14px">Look</div>
+        <div class="preset-row">
+          <button class="preset-pill active" data-preset="natural"   onclick="setPreset('natural')">Natural</button>
+          <button class="preset-pill"        data-preset="vivid"     onclick="setPreset('vivid')">Vivid</button>
+          <button class="preset-pill"        data-preset="cinematic" onclick="setPreset('cinematic')">Cinematic</button>
+          <button class="preset-pill"        data-preset="warm"      onclick="setPreset('warm')">Warm</button>
+          <button class="preset-pill"        data-preset="cool"      onclick="setPreset('cool')">Cool</button>
+          <button class="preset-pill"        data-preset="bwhdr"     onclick="setPreset('bwhdr')">B&amp;W HDR</button>
+        </div>
+
+        <div class="settings-group-label" style="margin-top:14px">Fine-tune</div>
+        <div class="slider-grid">
+          <label>Brightness</label>
+          <input type="range" id="op-brightness" min="-50" max="50" value="0" oninput="syncSlider('brightness',this.value)">
+          <span id="op-brightness-val">0</span>
+
+          <label>Contrast</label>
+          <input type="range" id="op-contrast" min="-50" max="50" value="0" oninput="syncSlider('contrast',this.value)">
+          <span id="op-contrast-val">0</span>
+
+          <label>Saturation</label>
+          <input type="range" id="op-saturation" min="-100" max="50" value="0" oninput="syncSlider('saturation',this.value)">
+          <span id="op-saturation-val">0</span>
+
+          <label>Sharpness</label>
+          <input type="range" id="op-sharpness" min="0" max="100" value="0" oninput="syncSlider('sharpness',this.value)">
+          <span id="op-sharpness-val">0</span>
+        </div>
+
+      </div>
+    </div>
+
     <div>
-      <div class="section-label">04 — Trip Context</div>
+      <div class="section-label">05 — Trip Context</div>
       <div class="field">
         <label>Tell the AI about your trip</label>
         <textarea id="tripContext" placeholder="e.g. Solo trip to Bali, Indonesia — March 2026. 10 days. Visited Ubud, Seminyak, Canggu. Lots of food, temples, rice fields, sunset sessions. Vibe: peaceful but adventurous."></textarea>
@@ -688,7 +717,7 @@
     </button>
 
     <div id="minnalSection" style="display:none">
-      <div class="section-label">05 — Schedule via Minnal</div>
+      <div class="section-label">06 — Schedule via Minnal</div>
       <div class="field">
         <label>Minnal API Key</label>
         <input type="password" id="minnalKey" placeholder="sk_..." oninput="onMinnalKeyInput(this.value)" />
@@ -1199,8 +1228,10 @@
 
   // ── Settings ────────────────────────────────────────────────────────────────
 
-  let _activeTab = 'gemini';
+  let _activeTab  = 'gemini';
+  let _aiProvider = 'gemini';   // tracks actual provider, independent of active tab
   let _outputFormat = 'shorts';
+  let _syncSliderTimer = null;
 
   const PRESETS = {
     natural:   { brightness:  0, contrast:  0, saturation:   0, sharpness:  0 },
@@ -1211,46 +1242,127 @@
     bwhdr:     { brightness: -5, contrast: 30, saturation: -100, sharpness: 25 },
   };
 
-  function setOutputFormat(fmt) {
+  // ── Output popover ──────────────────────────────────────────────────────────
+
+  function toggleOutputPopover() {
+    const pop = document.getElementById('outputPopover');
+    const btn = document.getElementById('outputToggleBtn');
+    if (pop.classList.contains('open')) {
+      pop.classList.remove('open');
+      btn.classList.remove('open');
+    } else {
+      // Load current values from server then open
+      fetch('/api/settings').then(r => r.json()).then(d => {
+        setOutputFormat(d.output_format || 'shorts', /*save=*/false);
+        document.getElementById('op-smart-crop').checked = d.smart_crop !== false;
+        const vals = {
+          brightness: d.filter_brightness || 0,
+          contrast:   d.filter_contrast   || 0,
+          saturation: d.filter_saturation || 0,
+          sharpness:  d.filter_sharpness  || 0,
+        };
+        ['brightness','contrast','saturation','sharpness'].forEach(k => {
+          document.getElementById(`op-${k}`).value = vals[k];
+          document.getElementById(`op-${k}-val`).textContent = vals[k];
+        });
+        // Highlight matching preset pill (if any)
+        _highlightMatchingPreset(vals);
+        updateOutputLabel();
+      });
+      pop.classList.add('open');
+      btn.classList.add('open');
+    }
+  }
+
+  // Close popover when clicking outside the outputStep wrapper
+  document.addEventListener('click', (e) => {
+    const step = document.getElementById('outputStep');
+    const pop  = document.getElementById('outputPopover');
+    const btn  = document.getElementById('outputToggleBtn');
+    if (step && pop && !step.contains(e.target)) {
+      pop.classList.remove('open');
+      btn && btn.classList.remove('open');
+    }
+  });
+
+  function _highlightMatchingPreset(vals) {
+    let matched = null;
+    for (const [name, p] of Object.entries(PRESETS)) {
+      if (p.brightness === +vals.brightness && p.contrast === +vals.contrast &&
+          p.saturation === +vals.saturation && p.sharpness === +vals.sharpness) {
+        matched = name; break;
+      }
+    }
+    document.querySelectorAll('.preset-pill').forEach(el =>
+      el.classList.toggle('active', el.dataset.preset === matched));
+  }
+
+  function updateOutputLabel() {
+    const fmtNames = { shorts: 'YT Shorts', reels: 'Reels', tiktok: 'TikTok' };
+    document.getElementById('opFormatLabel').textContent = fmtNames[_outputFormat] || 'YT Shorts';
+
+    const activePill = document.querySelector('.preset-pill.active');
+    const presetText = activePill ? activePill.textContent.trim() : 'Custom';
+    document.getElementById('opLookLabel').textContent = presetText;
+
+    const cropOn = document.getElementById('op-smart-crop')?.checked ?? true;
+    document.getElementById('opCropLabel').textContent = cropOn ? ' · Crop ✓' : '';
+  }
+
+  async function saveOutputSettings() {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        output_format:     _outputFormat,
+        smart_crop:        document.getElementById('op-smart-crop').checked,
+        filter_brightness: +document.getElementById('op-brightness').value,
+        filter_contrast:   +document.getElementById('op-contrast').value,
+        filter_saturation: +document.getElementById('op-saturation').value,
+        filter_sharpness:  +document.getElementById('op-sharpness').value,
+      })
+    }).catch(() => {});
+    updateOutputLabel();
+  }
+
+  function setOutputFormat(fmt, save = true) {
     _outputFormat = fmt;
     document.querySelectorAll('.fmt-pill').forEach(el =>
       el.classList.toggle('active', el.dataset.fmt === fmt));
+    updateOutputLabel();
+    if (save) saveOutputSettings();
   }
 
   function setPreset(name) {
     const p = PRESETS[name];
     ['brightness','contrast','saturation','sharpness'].forEach(k => {
-      document.getElementById(`s-${k}`).value = p[k];
-      document.getElementById(`s-${k}-val`).textContent = p[k];
+      document.getElementById(`op-${k}`).value = p[k];
+      document.getElementById(`op-${k}-val`).textContent = p[k];
     });
     document.querySelectorAll('.preset-pill').forEach(el =>
       el.classList.toggle('active', el.dataset.preset === name));
+    updateOutputLabel();
+    saveOutputSettings();
   }
 
   function syncSlider(key, val) {
-    document.getElementById(`s-${key}-val`).textContent = val;
-    // clear preset selection since user is manually tuning
+    document.getElementById(`op-${key}-val`).textContent = val;
+    // Clear preset highlight — user is now in "Custom" mode
     document.querySelectorAll('.preset-pill').forEach(el => el.classList.remove('active'));
+    updateOutputLabel();
+    // Debounce the API save so we don't spam while dragging
+    clearTimeout(_syncSliderTimer);
+    _syncSliderTimer = setTimeout(saveOutputSettings, 400);
   }
+
+  // ── AI Settings modal ───────────────────────────────────────────────────────
 
   function openSettings() {
     fetch('/api/settings').then(r => r.json()).then(d => {
+      _aiProvider = d.ai_provider || 'gemini';
       document.getElementById('s-ollama-host').value  = d.ollama_host  || '';
       document.getElementById('s-ollama-model').value = d.ollama_model || '';
-      // Output tab
-      setOutputFormat(d.output_format || 'shorts');
-      document.getElementById('s-smart-crop').checked = d.smart_crop !== false;
-      const vals = {
-        brightness: d.filter_brightness || 0,
-        contrast:   d.filter_contrast   || 0,
-        saturation: d.filter_saturation || 0,
-        sharpness:  d.filter_sharpness  || 0,
-      };
-      ['brightness','contrast','saturation','sharpness'].forEach(k => {
-        document.getElementById(`s-${k}`).value = vals[k];
-        document.getElementById(`s-${k}-val`).textContent = vals[k];
-      });
-      switchTab(d.ai_provider === 'ollama' ? 'ollama' : 'gemini');
+      switchTab(_aiProvider === 'ollama' ? 'ollama' : 'gemini');
     });
     document.getElementById('settingsOverlay').classList.add('open');
     document.getElementById('settingsSaveStatus').textContent = '';
@@ -1262,8 +1374,10 @@
 
   function switchTab(name) {
     _activeTab = name;
+    // Only update the actual AI provider when user explicitly picks Gemini or Ollama
+    if (name === 'gemini' || name === 'ollama') _aiProvider = name;
     document.querySelectorAll('.tab').forEach((t, i) => {
-      const tabs = ['gemini','ollama','minnal','output'];
+      const tabs = ['gemini','ollama','minnal'];
       t.classList.toggle('active', tabs[i] === name);
     });
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -1274,16 +1388,9 @@
     const status = document.getElementById('settingsSaveStatus');
     status.textContent = 'Saving…';
     const body = {
-      ai_provider:    _activeTab === 'ollama' ? 'ollama' : 'gemini',
-      ollama_host:    document.getElementById('s-ollama-host').value.trim(),
-      ollama_model:   document.getElementById('s-ollama-model').value.trim(),
-      // Output settings (always sent so they persist regardless of active tab)
-      output_format:    _outputFormat,
-      smart_crop:       document.getElementById('s-smart-crop').checked,
-      filter_brightness: +document.getElementById('s-brightness').value,
-      filter_contrast:   +document.getElementById('s-contrast').value,
-      filter_saturation: +document.getElementById('s-saturation').value,
-      filter_sharpness:  +document.getElementById('s-sharpness').value,
+      ai_provider:  _aiProvider,
+      ollama_host:  document.getElementById('s-ollama-host').value.trim(),
+      ollama_model: document.getElementById('s-ollama-model').value.trim(),
     };
     const geminiKey = document.getElementById('s-gemini-key').value.trim();
     if (geminiKey) body.gemini_api_key = geminiKey;
