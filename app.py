@@ -367,7 +367,12 @@ Respond in JSON:
     return {"shorts": [], "raw": text}
 
 def cut_and_concat(segments, output_name):
-    """Cut multiple segments from source videos and concatenate into one clip."""
+    """Cut multiple segments and concatenate into one H.264/AAC mp4.
+
+    Each segment is re-encoded to H.264 so the output plays on every
+    device without needing HEVC/H.265 codec packs (common DJI footage issue).
+    CRF 23 gives good quality; 'fast' preset keeps encoding time reasonable.
+    """
     output_path = OUTPUT_DIR / output_name
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
@@ -381,7 +386,13 @@ def cut_and_concat(segments, output_name):
                 FFMPEG,
                 "-ss", str(to_seconds(seg.get("start_time", 0))),
                 "-to", str(to_seconds(seg.get("end_time", 60))),
-                "-i", src, "-c", "copy", sf, "-y", "-loglevel", "quiet"
+                "-i", src,
+                # Re-encode to H.264 so output is universally compatible
+                # (DJI/GoPro source footage is typically HEVC which needs codec packs)
+                "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",  # web-optimised — plays while downloading
+                sf, "-y", "-loglevel", "quiet"
             ]
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode == 0 and os.path.exists(sf):
@@ -395,7 +406,7 @@ def cut_and_concat(segments, output_name):
             shutil.copy2(seg_files[0], str(output_path))
             return True, str(output_path)
 
-        # Write concat list then merge with stream copy (fast, no re-encode)
+        # All segments are now H.264 — stream-copy concat is fast and lossless
         list_path = os.path.join(tmpdir, "concat.txt")
         with open(list_path, "w") as f:
             for sf in seg_files:
