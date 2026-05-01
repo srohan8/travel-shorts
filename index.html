@@ -333,6 +333,28 @@
     white-space: nowrap;
   }
 
+  /* Output tab — format & preset pills */
+  .format-row, .preset-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .fmt-pill, .preset-pill {
+    flex:1; min-width:60px; padding:8px 6px; border-radius:8px; font-size:12px;
+    text-align:center; background:var(--surface2); border:1px solid var(--border);
+    color:var(--muted); cursor:pointer; line-height:1.5; transition:border-color .15s,color .15s;
+  }
+  .fmt-pill.active, .preset-pill.active {
+    border-color:var(--accent); color:var(--accent); background:#1a1a0a;
+  }
+  .fmt-pill:hover, .preset-pill:hover { border-color:var(--accent); color:var(--text); }
+  .slider-grid {
+    display:grid; grid-template-columns:80px 1fr 32px;
+    gap:7px 10px; align-items:center; font-size:12px;
+  }
+  .slider-grid input[type=range] { width:100%; accent-color:var(--accent); }
+  .slider-grid span { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); text-align:right; }
+  .settings-group-label {
+    font-size:10px; color:var(--muted); letter-spacing:.8px;
+    text-transform:uppercase; margin:14px 0 4px;
+  }
+
   .short-body {
     padding: 20px 24px;
     display: grid;
@@ -504,6 +526,7 @@
       <button class="tab active" onclick="switchTab('gemini')">Gemini</button>
       <button class="tab" onclick="switchTab('ollama')">Ollama</button>
       <button class="tab" onclick="switchTab('minnal')">Minnal</button>
+      <button class="tab" onclick="switchTab('output')">Output</button>
     </div>
 
     <!-- Gemini tab -->
@@ -542,6 +565,58 @@
         <input type="password" id="s-minnal-key" placeholder="sk_..." />
       </div>
       <p class="hint">Get your key at <span style="color:var(--accent)">app.minnal.io</span> → Settings → API Keys.</p>
+    </div>
+
+    <!-- Output tab -->
+    <div class="tab-panel" id="tab-output">
+
+      <div class="settings-group-label">Format</div>
+      <div class="format-row">
+        <button class="fmt-pill active" data-fmt="shorts" onclick="setOutputFormat('shorts')">
+          YT Shorts<br><small style="color:var(--muted)">≤ 60s · 9:16</small>
+        </button>
+        <button class="fmt-pill" data-fmt="reels" onclick="setOutputFormat('reels')">
+          Reels<br><small style="color:var(--muted)">≤ 90s · 9:16</small>
+        </button>
+        <button class="fmt-pill" data-fmt="tiktok" onclick="setOutputFormat('tiktok')">
+          TikTok<br><small style="color:var(--muted)">≤ 10 min · 9:16</small>
+        </button>
+      </div>
+
+      <div class="settings-group-label" style="margin-top:16px">Smart Crop</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="s-smart-crop" checked>
+        Auto-crop landscape footage to 9:16 (face &amp; motion detection)
+      </label>
+
+      <div class="settings-group-label" style="margin-top:16px">Look</div>
+      <div class="preset-row">
+        <button class="preset-pill active" data-preset="natural"   onclick="setPreset('natural')">Natural</button>
+        <button class="preset-pill"        data-preset="vivid"     onclick="setPreset('vivid')">Vivid</button>
+        <button class="preset-pill"        data-preset="cinematic" onclick="setPreset('cinematic')">Cinematic</button>
+        <button class="preset-pill"        data-preset="warm"      onclick="setPreset('warm')">Warm</button>
+        <button class="preset-pill"        data-preset="cool"      onclick="setPreset('cool')">Cool</button>
+      </div>
+
+      <div class="settings-group-label" style="margin-top:16px">Fine-tune</div>
+      <div class="slider-grid">
+        <label>Brightness</label>
+        <input type="range" id="s-brightness" min="-50" max="50" value="0" oninput="syncSlider('brightness',this.value)">
+        <span id="s-brightness-val">0</span>
+
+        <label>Contrast</label>
+        <input type="range" id="s-contrast" min="-50" max="50" value="0" oninput="syncSlider('contrast',this.value)">
+        <span id="s-contrast-val">0</span>
+
+        <label>Saturation</label>
+        <input type="range" id="s-saturation" min="-50" max="50" value="0" oninput="syncSlider('saturation',this.value)">
+        <span id="s-saturation-val">0</span>
+
+        <label>Sharpness</label>
+        <input type="range" id="s-sharpness" min="0" max="100" value="0" oninput="syncSlider('sharpness',this.value)">
+        <span id="s-sharpness-val">0</span>
+      </div>
+
     </div>
 
     <div class="modal-actions">
@@ -1124,11 +1199,55 @@
   // ── Settings ────────────────────────────────────────────────────────────────
 
   let _activeTab = 'gemini';
+  let _outputFormat = 'shorts';
+
+  const PRESETS = {
+    natural:   { brightness:  0, contrast:  0, saturation:   0, sharpness:  0 },
+    vivid:     { brightness:  5, contrast: 10, saturation:  40, sharpness: 30 },
+    cinematic: { brightness: -5, contrast: 15, saturation: -15, sharpness: 20 },
+    warm:      { brightness:  3, contrast:  5, saturation:  10, sharpness: 10 },
+    cool:      { brightness:  0, contrast:  5, saturation: -10, sharpness: 10 },
+  };
+
+  function setOutputFormat(fmt) {
+    _outputFormat = fmt;
+    document.querySelectorAll('.fmt-pill').forEach(el =>
+      el.classList.toggle('active', el.dataset.fmt === fmt));
+  }
+
+  function setPreset(name) {
+    const p = PRESETS[name];
+    ['brightness','contrast','saturation','sharpness'].forEach(k => {
+      document.getElementById(`s-${k}`).value = p[k];
+      document.getElementById(`s-${k}-val`).textContent = p[k];
+    });
+    document.querySelectorAll('.preset-pill').forEach(el =>
+      el.classList.toggle('active', el.dataset.preset === name));
+  }
+
+  function syncSlider(key, val) {
+    document.getElementById(`s-${key}-val`).textContent = val;
+    // clear preset selection since user is manually tuning
+    document.querySelectorAll('.preset-pill').forEach(el => el.classList.remove('active'));
+  }
 
   function openSettings() {
     fetch('/api/settings').then(r => r.json()).then(d => {
       document.getElementById('s-ollama-host').value  = d.ollama_host  || '';
       document.getElementById('s-ollama-model').value = d.ollama_model || '';
+      // Output tab
+      setOutputFormat(d.output_format || 'shorts');
+      document.getElementById('s-smart-crop').checked = d.smart_crop !== false;
+      const vals = {
+        brightness: d.filter_brightness || 0,
+        contrast:   d.filter_contrast   || 0,
+        saturation: d.filter_saturation || 0,
+        sharpness:  d.filter_sharpness  || 0,
+      };
+      ['brightness','contrast','saturation','sharpness'].forEach(k => {
+        document.getElementById(`s-${k}`).value = vals[k];
+        document.getElementById(`s-${k}-val`).textContent = vals[k];
+      });
       switchTab(d.ai_provider === 'ollama' ? 'ollama' : 'gemini');
     });
     document.getElementById('settingsOverlay').classList.add('open');
@@ -1142,7 +1261,7 @@
   function switchTab(name) {
     _activeTab = name;
     document.querySelectorAll('.tab').forEach((t, i) => {
-      const tabs = ['gemini','ollama','minnal'];
+      const tabs = ['gemini','ollama','minnal','output'];
       t.classList.toggle('active', tabs[i] === name);
     });
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -1156,6 +1275,13 @@
       ai_provider:    _activeTab === 'ollama' ? 'ollama' : 'gemini',
       ollama_host:    document.getElementById('s-ollama-host').value.trim(),
       ollama_model:   document.getElementById('s-ollama-model').value.trim(),
+      // Output settings (always sent so they persist regardless of active tab)
+      output_format:    _outputFormat,
+      smart_crop:       document.getElementById('s-smart-crop').checked,
+      filter_brightness: +document.getElementById('s-brightness').value,
+      filter_contrast:   +document.getElementById('s-contrast').value,
+      filter_saturation: +document.getElementById('s-saturation').value,
+      filter_sharpness:  +document.getElementById('s-sharpness').value,
     };
     const geminiKey = document.getElementById('s-gemini-key').value.trim();
     if (geminiKey) body.gemini_api_key = geminiKey;

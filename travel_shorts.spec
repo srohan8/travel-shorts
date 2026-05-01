@@ -1,6 +1,8 @@
 import sys
 block_cipher = None
 
+from PyInstaller.utils.hooks import collect_data_files
+
 a = Analysis(
     ['app.py'],
     pathex=[],
@@ -9,7 +11,7 @@ a = Analysis(
         ('index.html',   '.'),
         ('ffmpeg/bin',   'ffmpeg/bin'),
         ('.env.example', '.'),
-    ],
+    ] + collect_data_files('cv2'),   # includes haar cascade XMLs
     hiddenimports=[
         # Flask
         'flask',
@@ -51,6 +53,13 @@ a = Analysis(
         # dotenv
         'dotenv',
         'dotenv.main',
+        # OpenCV + NumPy
+        'cv2',
+        'cv2.data',
+        'numpy',
+        'numpy.core',
+        'numpy.core._multiarray_umath',
+        'numpy.core._multiarray_tests',
     ],
     hookspath=[],
     hooksconfig={},

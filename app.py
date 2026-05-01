@@ -46,6 +46,16 @@ OLLAMA_HOST    = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 MINNAL_API_KEY = os.environ.get("MINNAL_API_KEY", "")
 MINNAL_BASE    = "https://app.minnal.io"
 
+# Output / filter settings
+OUTPUT_FORMAT     = os.environ.get("OUTPUT_FORMAT", "shorts")   # shorts | reels | tiktok
+SMART_CROP        = os.environ.get("SMART_CROP", "true") == "true"
+FILTER_BRIGHTNESS = float(os.environ.get("FILTER_BRIGHTNESS", "0"))   # -50 to +50
+FILTER_CONTRAST   = float(os.environ.get("FILTER_CONTRAST",   "0"))   # -50 to +50
+FILTER_SATURATION = float(os.environ.get("FILTER_SATURATION", "0"))   # -50 to +50
+FILTER_SHARPNESS  = float(os.environ.get("FILTER_SHARPNESS",  "0"))   #   0 to 100
+
+FORMAT_MAX_DURATION = {"shorts": 60, "reels": 90, "tiktok": 600}
+
 OUTPUT_DIR = _APP_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -82,6 +92,12 @@ def get_video_metadata(video_path):
         fmt = data.get("format", {})
         tags = fmt.get("tags", {})
         duration = float(fmt.get("duration", 0))
+        width, height = 0, 0
+        for stream in data.get("streams", []):
+            if stream.get("codec_type") == "video":
+                width  = stream.get("width",  0)
+                height = stream.get("height", 0)
+                break
         return {
             "filename": Path(video_path).name,
             "duration": duration,
@@ -89,9 +105,11 @@ def get_video_metadata(video_path):
             "size_mb": round(int(fmt.get("size", 0)) / 1024 / 1024, 1),
             "creation_time": tags.get("creation_time", tags.get("date", "Unknown")),
             "location": tags.get("location", tags.get("com.apple.quicktime.location.ISO6709", "Unknown")),
+            "width": width,
+            "height": height,
             "path": video_path
         }
-    return {"filename": Path(video_path).name, "duration": 0, "path": video_path}
+    return {"filename": Path(video_path).name, "duration": 0, "width": 0, "height": 0, "path": video_path}
 
 def extract_frames(video_path, num_frames=None):
     """Extract evenly spaced frames from video, scaling count with duration"""
@@ -366,13 +384,113 @@ Respond in JSON:
         return json.loads(json_match.group())
     return {"shorts": [], "raw": text}
 
-def cut_and_concat(segments, output_name):
-    """Cut multiple segments and concatenate into one H.264/AAC mp4.
+def enforce_duration(segments, fmt):
+    """Trim segments so total duration fits within the platform's limit."""
+    limit = FORMAT_MAX_DURATION.get(fmt, 9999)
+    out, budget = [], float(limit)
+    for seg in segments:
+        dur = to_seconds(seg.get("end_time", 0)) - to_seconds(seg.get("start_time", 0))
+        if budget <= 0:
+            break
+        if dur <= budget:
+            out.append(seg)
+            budget -= dur
+        else:
+            out.append({**seg, "end_time": to_seconds(seg.get("start_time", 0)) + budget})
+            budget = 0
+    return out
 
-    Each segment is re-encoded to H.264 so the output plays on every
-    device without needing HEVC/H.265 codec packs (common DJI footage issue).
-    CRF 23 gives good quality; 'fast' preset keeps encoding time reasonable.
-    """
+
+def detect_crop_offset(video_path, start_sec, src_w, src_h):
+    """Return (x_offset, crop_width) for a 9:16 crop using face or motion detection."""
+    import cv2
+    crop_w  = int(src_h * 9 / 16)
+    default = (src_w - crop_w) // 2
+
+    if crop_w >= src_w:
+        return 0, src_w  # source is already portrait
+
+    if getattr(sys, 'frozen', False):
+        cas = str(Path(sys._MEIPASS) / 'cv2' / 'data' / 'haarcascade_frontalface_default.xml')
+    else:
+        cas = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+
+    try:
+        fc  = cv2.CascadeClassifier(cas)
+        cap = cv2.VideoCapture(video_path)
+        centers = []
+        for off in [0, 2, 4]:   # sample 3 frames near segment start
+            cap.set(cv2.CAP_PROP_POS_MSEC, (start_sec + off) * 1000)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            scale = min(1.0, 640 / src_w)
+            small = cv2.resize(frame, (int(src_w * scale), int(src_h * scale)))
+            gray  = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            faces = fc.detectMultiScale(gray, 1.1, 4, minSize=(30, 30))
+            if len(faces):
+                fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+                centers.append(int((fx + fw // 2) / scale))
+        cap.release()
+
+        if centers:
+            cx = sum(centers) // len(centers)
+        else:
+            # Motion fallback: find column region with highest variance (most visual interest)
+            cap = cv2.VideoCapture(video_path)
+            cap.set(cv2.CAP_PROP_POS_MSEC, start_sec * 1000)
+            ret, frame = cap.read()
+            cap.release()
+            if ret:
+                gray     = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                col_var  = gray.var(axis=0).tolist()
+                window   = max(1, src_w // 8)
+                smoothed = [
+                    sum(col_var[max(0, i - window): i + window]) / (2 * window)
+                    for i in range(src_w)
+                ]
+                cx = smoothed.index(max(smoothed))
+            else:
+                cx = src_w // 2
+
+        x = max(0, min(cx - crop_w // 2, src_w - crop_w))
+        return x, crop_w
+
+    except Exception as e:
+        log(f"  Smart crop error ({Path(video_path).name}): {e}")
+        return default, crop_w
+
+
+def build_vf_chain(crop_x, crop_w, src_w, src_h,
+                   brightness, contrast, saturation, sharpness):
+    """Build FFmpeg -vf string: [crop →] scale → [eq →] [unsharp]."""
+    filters = []
+
+    if SMART_CROP and src_w > src_h:
+        filters.append(f"crop={crop_w}:{src_h}:{crop_x}:0")
+
+    filters.append("scale=1080:1920:flags=lanczos")
+
+    eq = []
+    b = brightness / 100.0
+    c = 1.0 + contrast   / 100.0
+    s = 1.0 + saturation / 100.0
+    if abs(b) > 0.001:   eq.append(f"brightness={b:.3f}")
+    if abs(c - 1) > 0.001: eq.append(f"contrast={c:.3f}")
+    if abs(s - 1) > 0.001: eq.append(f"saturation={s:.3f}")
+    if eq:
+        filters.append(f"eq={':'.join(eq)}")
+
+    if sharpness > 0:
+        sh = sharpness / 100.0
+        filters.append(f"unsharp=5:5:{sh:.2f}:5:5:0")
+
+    return ",".join(filters)
+
+
+def cut_and_concat(segments, output_name):
+    """Cut segments, apply smart crop + filters, concatenate into one H.264/AAC mp4."""
+    segments = enforce_duration(segments, OUTPUT_FORMAT)
     output_path = OUTPUT_DIR / output_name
     with tempfile.TemporaryDirectory() as tmpdir:
         seg_files = []
@@ -381,17 +499,29 @@ def cut_and_concat(segments, output_name):
             if not src or not os.path.exists(src):
                 log(f"  Segment source not found, skipping: {src}")
                 continue
-            sf = os.path.join(tmpdir, f"seg_{i:03d}.mp4")
+            sf       = os.path.join(tmpdir, f"seg_{i:03d}.mp4")
+            meta     = get_video_metadata(src)
+            src_w    = meta.get("width",  1920)
+            src_h    = meta.get("height", 1080)
+            start_s  = to_seconds(seg.get("start_time", 0))
+
+            if SMART_CROP and src_w > src_h:
+                crop_x, crop_w = detect_crop_offset(src, start_s, src_w, src_h)
+            else:
+                crop_x, crop_w = 0, src_w
+
+            vf = build_vf_chain(crop_x, crop_w, src_w, src_h,
+                                FILTER_BRIGHTNESS, FILTER_CONTRAST,
+                                FILTER_SATURATION, FILTER_SHARPNESS)
             cmd = [
                 FFMPEG,
-                "-ss", str(to_seconds(seg.get("start_time", 0))),
+                "-ss", str(start_s),
                 "-to", str(to_seconds(seg.get("end_time", 60))),
                 "-i", src,
-                # Re-encode to H.264 so output is universally compatible
-                # (DJI/GoPro source footage is typically HEVC which needs codec packs)
+                "-vf", vf,
                 "-c:v", "libx264", "-crf", "23", "-preset", "fast",
                 "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart",  # web-optimised — plays while downloading
+                "-movflags", "+faststart",
                 sf, "-y", "-loglevel", "quiet"
             ]
             r = subprocess.run(cmd, capture_output=True)
@@ -636,16 +766,23 @@ def serve_output(filename):
 @app.route("/api/settings")
 def get_settings():
     return jsonify({
-        "ai_provider":    AI_PROVIDER,
-        "ollama_model":   OLLAMA_MODEL,
-        "ollama_host":    OLLAMA_HOST,
-        "gemini_key_set": bool(GEMINI_API_KEY),
-        "minnal_key_set": bool(MINNAL_API_KEY),
+        "ai_provider":      AI_PROVIDER,
+        "ollama_model":     OLLAMA_MODEL,
+        "ollama_host":      OLLAMA_HOST,
+        "gemini_key_set":   bool(GEMINI_API_KEY),
+        "minnal_key_set":   bool(MINNAL_API_KEY),
+        "output_format":    OUTPUT_FORMAT,
+        "smart_crop":       SMART_CROP,
+        "filter_brightness": FILTER_BRIGHTNESS,
+        "filter_contrast":   FILTER_CONTRAST,
+        "filter_saturation": FILTER_SATURATION,
+        "filter_sharpness":  FILTER_SHARPNESS,
     })
 
 @app.route("/api/settings", methods=["POST"])
 def save_settings():
-    global GEMINI_API_KEY, AI_PROVIDER, OLLAMA_MODEL, OLLAMA_HOST, MINNAL_API_KEY, FFMPEG, FFPROBE
+    global GEMINI_API_KEY, AI_PROVIDER, OLLAMA_MODEL, OLLAMA_HOST, MINNAL_API_KEY
+    global OUTPUT_FORMAT, SMART_CROP, FILTER_BRIGHTNESS, FILTER_CONTRAST, FILTER_SATURATION, FILTER_SHARPNESS
     data = request.json or {}
 
     def _set(key, val):
@@ -668,6 +805,24 @@ def save_settings():
     if "minnal_api_key" in data:
         MINNAL_API_KEY = data["minnal_api_key"]
         _set("MINNAL_API_KEY", MINNAL_API_KEY)
+    if "output_format" in data:
+        OUTPUT_FORMAT = data["output_format"]
+        _set("OUTPUT_FORMAT", OUTPUT_FORMAT)
+    if "smart_crop" in data:
+        SMART_CROP = bool(data["smart_crop"])
+        _set("SMART_CROP", str(SMART_CROP).lower())
+    if "filter_brightness" in data:
+        FILTER_BRIGHTNESS = float(data["filter_brightness"])
+        _set("FILTER_BRIGHTNESS", FILTER_BRIGHTNESS)
+    if "filter_contrast" in data:
+        FILTER_CONTRAST = float(data["filter_contrast"])
+        _set("FILTER_CONTRAST", FILTER_CONTRAST)
+    if "filter_saturation" in data:
+        FILTER_SATURATION = float(data["filter_saturation"])
+        _set("FILTER_SATURATION", FILTER_SATURATION)
+    if "filter_sharpness" in data:
+        FILTER_SHARPNESS = float(data["filter_sharpness"])
+        _set("FILTER_SHARPNESS", FILTER_SHARPNESS)
 
     return jsonify({"ok": True})
 
