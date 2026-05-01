@@ -1284,6 +1284,12 @@
     el.style.color = 'var(--muted)';
     try {
       const r = await fetch('/api/test-opencv');
+      if (!r.ok) {
+        // 404 = old server running without this endpoint, 500 = server error
+        el.textContent = r.status === 404 ? '↻ restart app' : `✗ server err ${r.status}`;
+        el.style.color = 'var(--error)';
+        return;
+      }
       const d = await r.json();
       if (d.ok && d.classifier_loaded) {
         el.textContent = `✓ OpenCV ${d.version}`;
@@ -1292,12 +1298,12 @@
         el.textContent = `⚠ cascade missing`;
         el.style.color = 'var(--error)';
       } else {
-        el.textContent = `✗ not installed`;
+        el.textContent = `✗ pip install opencv-python-headless`;
         el.style.color = 'var(--error)';
       }
     } catch {
-      el.textContent = '✗ check failed';
-      el.style.color = 'var(--error)';
+      el.textContent = '↻ restart app';
+      el.style.color = 'var(--muted)';
     }
   }
 
