@@ -606,6 +606,7 @@
     <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>
       Analyze & Generate Plan
     </button>
+    <div id="estimateHint" style="display:none; font-size:12px; color:var(--muted); margin-top:6px; font-family:'DM Mono',monospace;"></div>
     <button class="btn btn-secondary" id="stopBtn" onclick="stopAnalyze()" style="display:none; margin-top:8px; border-color:var(--error); color:var(--error);">
       ⏹ Stop & Get Results So Far
     </button>
@@ -651,6 +652,44 @@
   let planData = null;
   let progressInterval = null;
 
+  // ── Timing learning ──────────────────────────────────────────────────────────
+  const _TK = 'ts_vid_timings';
+
+  function _loadTimings() {
+    try { return JSON.parse(localStorage.getItem(_TK)) || []; } catch { return []; }
+  }
+
+  function _saveTimings(records) {
+    const all = [..._loadTimings(), ...records].slice(-100);
+    localStorage.setItem(_TK, JSON.stringify(all));
+  }
+
+  // Estimate ms for one video based on its duration_s
+  function _estimateMs(duration_s) {
+    const all = _loadTimings();
+    const same = all.filter(t =>
+      duration_s < 30  ? t.d < 30 :
+      duration_s < 120 ? t.d >= 30  && t.d < 120 :
+      duration_s < 300 ? t.d >= 120 && t.d < 300 : t.d >= 300
+    );
+    if (same.length >= 2)
+      return same.reduce((s, t) => s + t.ms, 0) / same.length;
+    // Defaults when no data yet
+    if (duration_s < 30)  return 25000;
+    if (duration_s < 120) return 40000;
+    if (duration_s < 300) return 55000;
+    return 70000;
+  }
+
+  function _fmtMs(ms) {
+    const s = Math.round(ms / 1000);
+    if (s < 90) return `~${s}s`;
+    return `~${Math.round(s / 60)} min`;
+  }
+
+  // Per-video timing state during an analysis run
+  let _vidTimings = [], _lastCurrent = 0, _lastCurrentTime = null;
+
   refreshAiStatus();
 
   async function saveKey() {
@@ -692,7 +731,7 @@
       selectedVideos = new Set(videos.map(v => v.path));
       renderVideoList();
       document.getElementById('videoSection').style.display = 'block';
-      document.getElementById('videoCount').textContent = `${videos.length} videos found`;
+      updateVideoCount();
       status.textContent = `✓ ${videos.length} videos found`;
       status.style.color = 'var(--success)';
       checkAnalyzeBtn();
@@ -741,10 +780,32 @@
   function selectAll() { selectedVideos = new Set(videos.map(v=>v.path)); renderVideoList(); checkAnalyzeBtn(); }
   function selectNone() { selectedVideos.clear(); renderVideoList(); checkAnalyzeBtn(); }
 
+  function updateVideoCount() {
+    const total = videos.length;
+    const sel   = selectedVideos.size;
+    document.getElementById('videoCount').textContent =
+      total ? `${sel} of ${total} selected` : '';
+  }
+
   function checkAnalyzeBtn() {
-    const hasKey = document.getElementById('keyDot').classList.contains('ok');
+    const hasKey    = document.getElementById('keyDot').classList.contains('ok');
     const hasVideos = selectedVideos.size > 0;
     document.getElementById('analyzeBtn').disabled = !(hasKey && hasVideos);
+    updateVideoCount();
+
+    const hint = document.getElementById('estimateHint');
+    if (hasVideos) {
+      const paths = Array.from(selectedVideos);
+      const totalMs = videos
+        .filter(v => paths.includes(v.path))
+        .reduce((sum, v) => sum + _estimateMs(v.duration || 60), 0);
+      const hasHistory = _loadTimings().length >= 2;
+      const label = hasHistory ? 'based on your history' : 'rough estimate';
+      hint.textContent = `⏱ ${_fmtMs(totalMs)} for ${selectedVideos.size} video${selectedVideos.size > 1 ? 's' : ''} · ${label}`;
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
   }
 
   function startProgressPolling() {
@@ -753,6 +814,12 @@
     box.classList.add('active');
     box.innerHTML = '';
     counter.style.display = 'none';
+
+    // Reset per-video timing trackers
+    _vidTimings = [];
+    _lastCurrent = 0;
+    _lastCurrentTime = Date.now();
+
     let lastCount = 0;
     progressInterval = setInterval(async () => {
       const r = await fetch('/api/progress');
@@ -771,6 +838,20 @@
       if (d.total > 0) {
         counter.style.display = 'block';
         counter.textContent = `${d.current} / ${d.total} videos analysed`;
+
+        // Track per-video elapsed time as each video completes
+        if (d.current > _lastCurrent) {
+          const now = Date.now();
+          const elapsed = now - _lastCurrentTime;
+          const vidPaths = Array.from(selectedVideos);
+          const justDoneIdx = _lastCurrent; // 0-based index of completed video
+          if (justDoneIdx < vidPaths.length) {
+            const vid = videos.find(v => v.path === vidPaths[justDoneIdx]);
+            if (vid?.duration) _vidTimings.push({ d: vid.duration, ms: elapsed });
+          }
+          _lastCurrent = d.current;
+          _lastCurrentTime = now;
+        }
       }
     }, 800);
   }
@@ -811,12 +892,14 @@
     });
 
     stopProgressPolling();
+    if (_vidTimings.length > 0) _saveTimings(_vidTimings);
     document.getElementById('progressBox').classList.remove('active');
     document.getElementById('stopBtn').style.display = 'none';
 
     const data = await r.json();
     btn.disabled = false;
     btn.innerHTML = 'Analyze & Generate Plan';
+    checkAnalyzeBtn(); // refresh estimate hint with updated history
 
     if (data.error) { alert(data.error); return; }
     planData = data;
