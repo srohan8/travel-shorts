@@ -319,18 +319,17 @@
     min-width: 40px;
   }
 
-  .short-title-block { flex: 1; }
-  .short-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
-  .short-source { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
-
-  .time-badge {
+  .short-title-block { flex: 1; min-width: 0; }
+  .short-title { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .segments-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .seg-badge {
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: var(--accent2);
     background: var(--surface2);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    color: var(--accent2);
+    border-radius: 4px;
+    padding: 2px 7px;
     white-space: nowrap;
   }
 
@@ -848,15 +847,21 @@
 
     shorts.forEach((s, i) => {
       const tags = (s.hashtags || []).map(t => `<span class="tag">${t}</span>`).join('');
+      const segs = s.segments || (s.source_video ? [{
+        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
+      }] : []);
+      const segHtml = segs.map((seg, si) => {
+        const name = (seg.source_video || 'unknown').split(/[/\\]/).pop();
+        return `<span class="seg-badge">▶ ${name} &nbsp;${seg.start_time || '0:00'}–${seg.end_time || '0:30'}</span>`;
+      }).join('');
       html += `
         <div class="short-card" id="card-${i}">
           <div class="short-header">
             <div class="short-number">${String(i+1).padStart(2,'0')}</div>
             <div class="short-title-block">
               <div class="short-title">${s.title || 'Untitled'}</div>
-              <div class="short-source">${s.source_video ? s.source_video.split(/[/\\]/).pop() : 'unknown'}</div>
+              <div class="segments-list">${segHtml}</div>
             </div>
-            <div class="time-badge">${s.start_time || '0:00'} → ${s.end_time || '0:45'}</div>
           </div>
           <div class="short-body">
             <div class="short-field" style="grid-column:1/-1">
@@ -929,15 +934,20 @@
     const s = shorts[index];
     if (!s) return;
 
-    const sourceVideo = resolveSourcePath(s.source_video);
+    // Build resolved segments list (support both new segments[] and legacy fields)
+    const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
+      source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
+    }] : []);
+    const segments = rawSegs.map(seg => ({
+      ...seg,
+      source_video: resolveSourcePath(seg.source_video)
+    }));
 
     const r = await fetch('/api/cut-clip', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({
-        input_path: sourceVideo,
-        start_time: s.start_time,
-        end_time: s.end_time,
+        segments,
         title: `Short_${index+1}_${(s.title||'clip').replace(/[^a-zA-Z0-9]/g,'_')}`
       })
     });
@@ -959,16 +969,21 @@
 
     const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
 
-    const headers = ['Order', 'Output File', 'Start', 'End', 'Title', 'Hook', 'Caption', 'Hashtags'];
+    const headers = ['Order', 'Output File', 'Segments', 'Title', 'Hook', 'Caption', 'Hashtags'];
     const rows = shorts.map((s, i) => {
       const order = s.order || (i + 1);
       const safeTitle = (s.title || `Short_${order}`).replace(/[^a-z0-9]/gi, '_').substring(0, 40);
       const outputFile = `Short_${order}_${safeTitle}.mp4`;
+      const segs = s.segments?.length ? s.segments : (s.source_video ? [{
+        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
+      }] : []);
+      const segStr = segs.map(seg =>
+        `${(seg.source_video || '').split(/[/\\]/).pop()} ${seg.start_time || ''}–${seg.end_time || ''}`
+      ).join(' | ');
       return [
         order,
         outputFile,
-        s.start_time || '',
-        s.end_time || '',
+        segStr,
         s.title || '',
         s.hook || '',
         s.caption || '',
@@ -988,10 +1003,18 @@
 
   async function cutAll() {
     const shorts = planData?.plan?.shorts || [];
-    const enriched = shorts.map(s => ({
-      ...s,
-      source_video: resolveSourcePath(s.source_video)
-    }));
+    const enriched = shorts.map(s => {
+      const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
+        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
+      }] : []);
+      return {
+        ...s,
+        segments: rawSegs.map(seg => ({
+          ...seg,
+          source_video: resolveSourcePath(seg.source_video)
+        }))
+      };
+    });
 
     const r = await fetch('/api/cut-all', {
       method: 'POST',

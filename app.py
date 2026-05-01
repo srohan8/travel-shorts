@@ -218,17 +218,17 @@ def generate_shorts_plan(all_analyses, trip_context, video_metas):
             for clip in a.get("suggested_clips", [])
         ]
     }, indent=2)
-    
+
     prompt = f"""Based on this travel video analysis, create a YouTube Shorts content plan.
 
 {summary}
 
-IMPORTANT: For source_video, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
+IMPORTANT: For source_video in each segment, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
 
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. A curated series of YouTube Shorts ordered for maximum engagement. Only include a clip if it offers something visually or narratively distinct — skip videos that look repetitive or similar to others already in the plan. Quality over quantity.
-3. Posting schedule suggestion
+2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short (the ideal length for YouTube Shorts). Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
+3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
 
 Respond in JSON:
@@ -239,18 +239,19 @@ Respond in JSON:
   "shorts": [
     {{
       "order": 1,
-      "source_video": "filename.mp4",
-      "start_time": "0:00",
-      "end_time": "0:45",
       "title": "...",
+      "segments": [
+        {{"source_video": "filename.mp4", "start_time": "0:10", "end_time": "0:25"}},
+        {{"source_video": "filename2.mp4", "start_time": "1:05", "end_time": "1:20"}},
+        {{"source_video": "filename3.mp4", "start_time": "0:45", "end_time": "1:05"}}
+      ],
       "hook": "...",
       "caption": "...",
-      "hashtags": ["#..."],
-      "ffmpeg_command": "ffmpeg -ss 0 -to 45 -i \\"input.mp4\\" -c copy \\"Short_1_Title.mp4\\""
+      "hashtags": ["#..."]
     }}
   ]
 }}"""
-    
+
     response = model.generate_content(prompt)
     text = response.text
     json_match = re.search(r'\{[\s\S]*\}', text)
@@ -325,12 +326,12 @@ def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas):
 
 {summary}
 
-IMPORTANT: For source_video, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
+IMPORTANT: For source_video in each segment, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
 
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. A curated series of YouTube Shorts ordered for maximum engagement. Only include a clip if it offers something visually or narratively distinct — skip videos that look repetitive or similar to others already in the plan. Quality over quantity.
-3. Posting schedule suggestion
+2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short (the ideal length for YouTube Shorts). Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
+3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
 
 Respond in JSON:
@@ -341,14 +342,15 @@ Respond in JSON:
   "shorts": [
     {{
       "order": 1,
-      "source_video": "filename.mp4",
-      "start_time": "0:00",
-      "end_time": "0:45",
       "title": "...",
+      "segments": [
+        {{"source_video": "filename.mp4", "start_time": "0:10", "end_time": "0:25"}},
+        {{"source_video": "filename2.mp4", "start_time": "1:05", "end_time": "1:20"}},
+        {{"source_video": "filename3.mp4", "start_time": "0:45", "end_time": "1:05"}}
+      ],
       "hook": "...",
       "caption": "...",
-      "hashtags": ["#..."],
-      "ffmpeg_command": "ffmpeg -ss 0 -to 45 -i \\"input.mp4\\" -c copy \\"Short_1_Title.mp4\\""
+      "hashtags": ["#..."]
     }}
   ]
 }}"""
@@ -364,15 +366,47 @@ Respond in JSON:
         return json.loads(json_match.group())
     return {"shorts": [], "raw": text}
 
-def cut_video_clip(input_path, start_time, end_time, output_name):
-    """Cut a video clip using FFmpeg"""
+def cut_and_concat(segments, output_name):
+    """Cut multiple segments from source videos and concatenate into one clip."""
     output_path = OUTPUT_DIR / output_name
-    cmd = [
-        FFMPEG, "-ss", str(start_time), "-to", str(end_time),
-        "-i", input_path, "-c", "copy", str(output_path), "-y", "-loglevel", "quiet"
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    return result.returncode == 0, str(output_path)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        seg_files = []
+        for i, seg in enumerate(segments):
+            src = seg.get("source_video", "")
+            if not src or not os.path.exists(src):
+                log(f"  Segment source not found, skipping: {src}")
+                continue
+            sf = os.path.join(tmpdir, f"seg_{i:03d}.mp4")
+            cmd = [
+                FFMPEG,
+                "-ss", str(to_seconds(seg.get("start_time", 0))),
+                "-to", str(to_seconds(seg.get("end_time", 60))),
+                "-i", src, "-c", "copy", sf, "-y", "-loglevel", "quiet"
+            ]
+            r = subprocess.run(cmd, capture_output=True)
+            if r.returncode == 0 and os.path.exists(sf):
+                seg_files.append(sf)
+
+        if not seg_files:
+            return False, str(output_path)
+
+        if len(seg_files) == 1:
+            import shutil
+            shutil.copy2(seg_files[0], str(output_path))
+            return True, str(output_path)
+
+        # Write concat list then merge with stream copy (fast, no re-encode)
+        list_path = os.path.join(tmpdir, "concat.txt")
+        with open(list_path, "w") as f:
+            for sf in seg_files:
+                f.write(f"file '{sf}'\n")
+        cmd = [
+            FFMPEG, "-f", "concat", "-safe", "0",
+            "-i", list_path, "-c", "copy",
+            str(output_path), "-y", "-loglevel", "quiet"
+        ]
+        r = subprocess.run(cmd, capture_output=True)
+        return r.returncode == 0, str(output_path)
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 
@@ -469,14 +503,27 @@ def analyze():
         else:
             plan = generate_shorts_plan(all_analyses, trip_context, video_metas)
 
-        # Resolve source_video filenames to full paths so cut-all works reliably
-        for short in plan.get("shorts", []):
-            sv = short.get("source_video", "")
+        # Resolve source_video filenames to full paths in each segment
+        def _resolve_path(sv):
             for a in all_analyses:
                 full_path = a.get("video", "")
-                if sv == Path(full_path).name or sv in full_path:
-                    short["source_video"] = full_path
-                    break
+                if sv == Path(full_path).name or sv in full_path or full_path.endswith(sv):
+                    return full_path
+            return sv  # leave as-is if not found
+
+        for short in plan.get("shorts", []):
+            if short.get("segments"):
+                for seg in short["segments"]:
+                    seg["source_video"] = _resolve_path(seg.get("source_video", ""))
+            elif short.get("source_video"):
+                # backward-compat: single-segment AI response
+                resolved = _resolve_path(short["source_video"])
+                short["source_video"] = resolved
+                short["segments"] = [{
+                    "source_video": resolved,
+                    "start_time": short.get("start_time", "0:00"),
+                    "end_time":   short.get("end_time",   "0:45"),
+                }]
 
         result = {"analyses": all_analyses, "plan": plan}
 
@@ -500,22 +547,27 @@ def to_seconds(t):
 def cut_clip():
     try:
         data = request.json
-        input_path = data.get("input_path")
-        start_time = data.get("start_time", "0")
-        end_time = data.get("end_time", "60")
-        title = data.get("title", "clip").replace(" ", "_")
-
-        if not input_path or not os.path.exists(input_path):
-            return jsonify({"error": f"Source not found: {input_path}"}), 400
-
-        start_sec = to_seconds(start_time)
-        end_sec = to_seconds(end_time)
+        title = (data.get("title", "clip")).replace(" ", "_")
         output_name = f"{title}.mp4"
 
-        success, output_path = cut_video_clip(input_path, start_sec, end_sec, output_name)
+        # New multi-segment format
+        segments = data.get("segments")
+        if segments:
+            success, output_path = cut_and_concat(segments, output_name)
+        else:
+            # Legacy single-clip format
+            input_path = data.get("input_path")
+            if not input_path or not os.path.exists(input_path):
+                return jsonify({"error": f"Source not found: {input_path}"}), 400
+            success, output_path = cut_and_concat([{
+                "source_video": input_path,
+                "start_time": data.get("start_time", "0"),
+                "end_time":   data.get("end_time", "60"),
+            }], output_name)
+
         if success:
             return jsonify({"ok": True, "output": output_path})
-        return jsonify({"error": "FFmpeg cut failed"}), 500
+        return jsonify({"error": "FFmpeg failed — check sources exist and timestamps are valid"}), 500
     except Exception as e:
         log(f"cut-clip error: {e}")
         return jsonify({"error": str(e)}), 500
@@ -528,21 +580,23 @@ def cut_all():
         results = []
 
         for i, short in enumerate(shorts):
-            source = short.get("source_video")
-            start = short.get("start_time", "0")
-            end = short.get("end_time", "60")
             title = short.get("title", f"Short_{i+1}").replace(" ", "_")[:40]
             output_name = f"Short_{i+1}_{title}.mp4"
 
-            log(f"Cutting: {source}")
-            if source and os.path.exists(source):
-                start_sec = to_seconds(start)
-                end_sec = to_seconds(end)
-                success, path = cut_video_clip(source, start_sec, end_sec, output_name)
-                results.append({"title": short.get("title"), "ok": success, "path": path})
-            else:
-                log(f"Source not found: {source}")
-                results.append({"title": short.get("title"), "ok": False, "error": f"Source not found: {source}"})
+            segments = short.get("segments") or []
+            # Backward-compat: single source_video
+            if not segments and short.get("source_video"):
+                segments = [{
+                    "source_video": short["source_video"],
+                    "start_time":   short.get("start_time", "0"),
+                    "end_time":     short.get("end_time", "60"),
+                }]
+
+            seg_names = ", ".join(Path(s.get("source_video","")).name for s in segments)
+            log(f"Stitching Short {i+1}: {seg_names}")
+            success, path = cut_and_concat(segments, output_name)
+            results.append({"title": short.get("title"), "ok": success, "path": path,
+                            "segments": len(segments)})
 
         return jsonify({"results": results})
     except Exception as e:
