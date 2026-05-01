@@ -666,6 +666,7 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:14px">
           <input type="checkbox" id="op-smart-crop" checked onchange="saveOutputSettings()">
           Smart crop to 9:16 (face &amp; motion)
+          <span id="opencvStatus" style="font-size:10px;margin-left:auto;font-family:'DM Mono',monospace"></span>
         </label>
 
         <div class="settings-group-label" style="margin-top:14px">Look</div>
@@ -1271,6 +1272,32 @@
       });
       pop.classList.add('open');
       btn.classList.add('open');
+      // Check OpenCV status when popover opens
+      checkOpenCV();
+    }
+  }
+
+  async function checkOpenCV() {
+    const el = document.getElementById('opencvStatus');
+    if (!el) return;
+    el.textContent = '…';
+    el.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/api/test-opencv');
+      const d = await r.json();
+      if (d.ok && d.classifier_loaded) {
+        el.textContent = `✓ OpenCV ${d.version}`;
+        el.style.color = 'var(--success)';
+      } else if (d.ok && !d.classifier_loaded) {
+        el.textContent = `⚠ cascade missing`;
+        el.style.color = 'var(--error)';
+      } else {
+        el.textContent = `✗ not installed`;
+        el.style.color = 'var(--error)';
+      }
+    } catch {
+      el.textContent = '✗ check failed';
+      el.style.color = 'var(--error)';
     }
   }
 

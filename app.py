@@ -831,6 +831,32 @@ def save_settings():
 
     return jsonify({"ok": True})
 
+@app.route("/api/test-opencv")
+def test_opencv():
+    try:
+        import cv2
+        ver = cv2.__version__
+        # Locate the face cascade
+        if getattr(sys, 'frozen', False):
+            cas_path = str(Path(sys._MEIPASS) / 'cv2' / 'data' / 'haarcascade_frontalface_default.xml')
+        else:
+            cas_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        cascade_ok = Path(cas_path).exists()
+        fc = cv2.CascadeClassifier(cas_path)
+        classifier_ok = not fc.empty()
+        return jsonify({
+            "ok": True,
+            "version": ver,
+            "cascade_path": cas_path,
+            "cascade_file_exists": cascade_ok,
+            "classifier_loaded": classifier_ok,
+            "smart_crop_active": SMART_CROP,
+        })
+    except ImportError:
+        return jsonify({"ok": False, "error": "OpenCV not installed — run: pip install opencv-python-headless"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
 @app.route("/api/test-ollama", methods=["POST"])
 def test_ollama():
     data = request.json or {}
