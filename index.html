@@ -959,17 +959,22 @@
 
     const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
 
-    const headers = ['Order', 'Video File', 'Start', 'End', 'Title', 'Hook', 'Caption', 'Hashtags'];
-    const rows = shorts.map(s => [
-      s.order || '',
-      (s.source_video || '').split(/[/\\]/).pop(),
-      s.start_time || '',
-      s.end_time || '',
-      s.title || '',
-      s.hook || '',
-      s.caption || '',
-      (s.hashtags || []).join(' ')
-    ].map(escape).join(','));
+    const headers = ['Order', 'Output File', 'Start', 'End', 'Title', 'Hook', 'Caption', 'Hashtags'];
+    const rows = shorts.map((s, i) => {
+      const order = s.order || (i + 1);
+      const safeTitle = (s.title || `Short_${order}`).replace(/[^a-z0-9]/gi, '_').substring(0, 40);
+      const outputFile = `Short_${order}_${safeTitle}.mp4`;
+      return [
+        order,
+        outputFile,
+        s.start_time || '',
+        s.end_time || '',
+        s.title || '',
+        s.hook || '',
+        s.caption || '',
+        (s.hashtags || []).join(' ')
+      ].map(escape).join(',');
+    });
 
     const csv = [headers.join(','), ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
