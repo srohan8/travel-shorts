@@ -596,6 +596,7 @@
         <button class="preset-pill"        data-preset="cinematic" onclick="setPreset('cinematic')">Cinematic</button>
         <button class="preset-pill"        data-preset="warm"      onclick="setPreset('warm')">Warm</button>
         <button class="preset-pill"        data-preset="cool"      onclick="setPreset('cool')">Cool</button>
+        <button class="preset-pill"        data-preset="bwhdr"     onclick="setPreset('bwhdr')">B&amp;W HDR</button>
       </div>
 
       <div class="settings-group-label" style="margin-top:16px">Fine-tune</div>
@@ -609,7 +610,7 @@
         <span id="s-contrast-val">0</span>
 
         <label>Saturation</label>
-        <input type="range" id="s-saturation" min="-50" max="50" value="0" oninput="syncSlider('saturation',this.value)">
+        <input type="range" id="s-saturation" min="-100" max="50" value="0" oninput="syncSlider('saturation',this.value)">
         <span id="s-saturation-val">0</span>
 
         <label>Sharpness</label>
@@ -1207,6 +1208,7 @@
     cinematic: { brightness: -5, contrast: 15, saturation: -15, sharpness: 20 },
     warm:      { brightness:  3, contrast:  5, saturation:  10, sharpness: 10 },
     cool:      { brightness:  0, contrast:  5, saturation: -10, sharpness: 10 },
+    bwhdr:     { brightness: -5, contrast: 30, saturation: -100, sharpness: 25 },
   };
 
   function setOutputFormat(fmt) {

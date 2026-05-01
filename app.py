@@ -404,7 +404,7 @@ def enforce_duration(segments, fmt):
 def detect_crop_offset(video_path, start_sec, src_w, src_h):
     """Return (x_offset, crop_width) for a 9:16 crop using face or motion detection."""
     import cv2
-    crop_w  = int(src_h * 9 / 16)
+    crop_w  = (int(src_h * 9 / 16) // 2) * 2  # round DOWN to even — H.264 requires even pixel dimensions
     default = (src_w - crop_w) // 2
 
     if crop_w >= src_w:
@@ -527,6 +527,9 @@ def cut_and_concat(segments, output_name):
             r = subprocess.run(cmd, capture_output=True)
             if r.returncode == 0 and os.path.exists(sf):
                 seg_files.append(sf)
+            else:
+                err = r.stderr.decode(errors="replace")[-500:]
+                log(f"  FFmpeg failed on segment {i} ({Path(src).name}): {err}")
 
         if not seg_files:
             return False, str(output_path)
