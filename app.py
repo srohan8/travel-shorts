@@ -513,10 +513,12 @@ def cut_and_concat(segments, output_name):
             vf = build_vf_chain(crop_x, crop_w, src_w, src_h,
                                 FILTER_BRIGHTNESS, FILTER_CONTRAST,
                                 FILTER_SATURATION, FILTER_SHARPNESS)
+            end_s    = to_seconds(seg.get("end_time", start_s + 60))
+            duration = max(0.1, end_s - start_s)   # use -t (duration) not -to (abs time)
             cmd = [
                 FFMPEG,
                 "-ss", str(start_s),
-                "-to", str(to_seconds(seg.get("end_time", 60))),
+                "-t",  str(duration),               # safe with input-side seeking
                 "-i", src,
                 "-vf", vf,
                 "-c:v", "libx264", "-crf", "23", "-preset", "fast",
