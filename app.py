@@ -11,7 +11,8 @@ import time
 import webbrowser
 from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, render_template
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv
+from dotenv import set_key as dotenv_set_key
 import google.generativeai as genai
 from PIL import Image
 import tempfile
@@ -28,6 +29,13 @@ else:
 
 _ENV_FILE = _APP_DIR / ".env"
 load_dotenv(_ENV_FILE)
+
+# Write errors to a log file when frozen (no console window)
+if getattr(sys, 'frozen', False):
+    import logging
+    _log_file = _APP_DIR / "travel-shorts.log"
+    logging.basicConfig(filename=str(_log_file), level=logging.ERROR,
+                        format="%(asctime)s %(levelname)s %(message)s")
 
 app = Flask(__name__)
 
@@ -384,7 +392,7 @@ def status():
     return jsonify({"key_set": key_set, "provider": AI_PROVIDER, "model": model_label})
 
 @app.route("/api/set-key", methods=["POST"])
-def set_key():
+def set_api_key():
     global GEMINI_API_KEY
     data = request.json
     GEMINI_API_KEY = data.get("api_key", "")
@@ -577,7 +585,7 @@ def save_settings():
 
     def _set(key, val):
         if val is not None:
-            set_key(str(_ENV_FILE), key, str(val))
+            dotenv_set_key(str(_ENV_FILE), key, str(val))
             os.environ[key] = str(val)
 
     if "ai_provider" in data:
@@ -597,6 +605,21 @@ def save_settings():
         _set("MINNAL_API_KEY", MINNAL_API_KEY)
 
     return jsonify({"ok": True})
+
+@app.route("/api/test-ollama", methods=["POST"])
+def test_ollama():
+    data = request.json or {}
+    host  = data.get("host", OLLAMA_HOST)
+    model = data.get("model", OLLAMA_MODEL)
+    try:
+        client = ollama_client.Client(host=host)
+        # list() is a lightweight ping — no GPU needed
+        models = client.list()
+        names  = [m.model for m in (models.models or [])]
+        has_model = any(model.split(":")[0] in n for n in names)
+        return jsonify({"ok": True, "models": names, "model_found": has_model})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 200  # 200 so JS can read the body
 
 # ── Minnal integration ───────────────────────────────────────────────────────
 

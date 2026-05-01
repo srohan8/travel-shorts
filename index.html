@@ -526,6 +526,10 @@
         <label>Model</label>
         <input type="text" id="s-ollama-model" placeholder="gemma4:31b-cloud" />
       </div>
+      <div style="margin:8px 0;">
+        <button class="btn btn-secondary" onclick="testOllamaConnection()" id="ollamaTestBtn">Test Connection</button>
+        <span id="ollamaTestStatus" style="margin-left:10px;font-size:13px;"></span>
+      </div>
       <p class="hint">
         Install Ollama from <span style="color:var(--accent)">ollama.com</span>, then pull the model:<br>
         <code>ollama pull gemma4:31b-cloud</code>
@@ -1067,6 +1071,38 @@
       status.textContent = `✗ ${e.message}`;
       status.style.color = 'var(--error)';
     }
+  }
+
+  async function testOllamaConnection() {
+    const btn    = document.getElementById('ollamaTestBtn');
+    const status = document.getElementById('ollamaTestStatus');
+    const host   = document.getElementById('s-ollama-host').value.trim() || 'http://localhost:11434';
+    const model  = document.getElementById('s-ollama-model').value.trim() || 'gemma4:31b-cloud';
+    btn.disabled = true;
+    status.textContent = 'Connecting…';
+    status.style.color = '';
+    try {
+      const r = await fetch('/api/test-ollama', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({host, model})
+      });
+      const d = await r.json();
+      if (d.ok) {
+        const found = d.model_found
+          ? `✓ Connected — ${model} ready`
+          : `⚠ Connected but model not pulled yet. Run: ollama pull ${model}`;
+        status.textContent = found;
+        status.style.color = d.model_found ? 'var(--success)' : 'var(--warning, #f59e0b)';
+      } else {
+        status.textContent = `✗ ${d.error}`;
+        status.style.color = 'var(--error)';
+      }
+    } catch(e) {
+      status.textContent = `✗ Cannot reach app server — is Travel Shorts AI running?`;
+      status.style.color = 'var(--error)';
+    }
+    btn.disabled = false;
   }
 
   async function refreshAiStatus() {
