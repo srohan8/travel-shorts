@@ -1,0 +1,81 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Download FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p ffmpeg/bin
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o ffmpeg.zip
+          unzip -o ffmpeg.zip -d ffmpeg/bin/
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
+          unzip -o ffprobe.zip -d ffmpeg/bin/
+          chmod +x ffmpeg/bin/ffmpeg ffmpeg/bin/ffprobe
+
+      - name: Download FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p ffmpeg/bin
+          curl -L "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" | tar xJ
+          cp ffmpeg-*-amd64-static/ffmpeg  ffmpeg/bin/
+          cp ffmpeg-*-amd64-static/ffprobe ffmpeg/bin/
+          chmod +x ffmpeg/bin/ffmpeg ffmpeg/bin/ffprobe
+
+      - name: Build with PyInstaller
+        run: pyinstaller travel_shorts.spec
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\Travel Shorts AI" -DestinationPath "Travel-Shorts-AI-Windows.zip"
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -r "../Travel-Shorts-AI-Mac.zip" "Travel Shorts AI.app"
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          zip -r "../Travel-Shorts-AI-Linux.zip" "Travel Shorts AI"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Travel-Shorts-AI-${{ runner.os }}
+          path: Travel-Shorts-AI-*.zip
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Travel-Shorts-AI-*.zip
+          generate_release_notes: true

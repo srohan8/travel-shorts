@@ -1,0 +1,32 @@
+# Secrets
+.env
+
+# Output
+output/
+
+# PyInstaller
+dist/
+build/
+*.spec.bak
+
+# FFmpeg — only keep Windows binaries, skip dev files
+ffmpeg/bin/ffmpeg
+ffmpeg/bin/ffprobe
+ffmpeg/doc/
+ffmpeg/include/
+ffmpeg/lib/
+ffmpeg/presets/
+
+# Project brief
+travel-shorts-project-brief.docx
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db

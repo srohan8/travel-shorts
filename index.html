@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Travel Shorts AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #e8c547;
+    --accent2: #ff6b35;
+    --text: #e8e8f0;
+    --muted: #666680;
+    --success: #4ade80;
+    --error: #f87171;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+
+  header {
+    padding: 40px 60px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 3px;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .tagline {
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding-bottom: 6px;
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: calc(100vh - 100px);
+  }
+
+  /* LEFT PANEL */
+  .panel-left {
+    border-right: 1px solid var(--border);
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  label {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  input:not([type=checkbox]), textarea {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    padding: 10px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  input::placeholder, textarea::placeholder { color: var(--muted); }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  .btn {
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    padding: 11px 20px;
+    transition: all 0.2s;
+    width: 100%;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0a0a0f;
+  }
+  .btn-primary:hover { background: #f0d060; transform: translateY(-1px); }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-danger {
+    background: var(--accent2);
+    color: white;
+  }
+  .btn-danger:hover { background: #ff8555; }
+
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .api-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.ok { background: var(--success); }
+
+  /* Video list */
+  .video-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .video-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    user-select: none;
+  }
+
+  .video-item:hover { border-color: var(--accent); }
+  .video-item.selected { border-color: var(--accent); background: #1f1f10; }
+
+  .video-item input[type=checkbox] { accent-color: var(--accent); }
+
+  .video-info { flex: 1; min-width: 0; }
+  .video-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .video-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* RIGHT PANEL */
+  .panel-right {
+    padding: 32px 40px;
+    overflow-y: auto;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 400px;
+    gap: 16px;
+    color: var(--muted);
+  }
+
+  .empty-icon {
+    font-size: 64px;
+    opacity: 0.3;
+  }
+
+  .empty-state h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    color: var(--border);
+  }
+
+  /* Progress */
+  .progress-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    height: 200px;
+    overflow-y: auto;
+    display: none;
+  }
+
+  .progress-box.active { display: block; }
+  .progress-line { margin-bottom: 4px; }
+  .progress-line::before { content: '> '; color: var(--accent); }
+
+  /* Plan output */
+  .plan-header {
+    margin-bottom: 32px;
+  }
+
+  .series-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 42px;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .narrative {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 600px;
+    margin-bottom: 8px;
+  }
+
+  .schedule-badge {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 11px;
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 1px;
+  }
+
+  .shorts-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 24px;
+  }
+
+  .short-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .short-card:hover { border-color: var(--accent); }
+
+  .short-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .short-number {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    color: var(--accent);
+    line-height: 1;
+    min-width: 40px;
+  }
+
+  .short-title-block { flex: 1; }
+  .short-title { font-size: 16px; font-weight: 500; margin-bottom: 4px; }
+  .short-source { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  .time-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--accent2);
+    white-space: nowrap;
+  }
+
+  .short-body {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .short-field label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .short-field p {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  .hook-text {
+    font-style: italic;
+    color: var(--accent) !important;
+    font-size: 14px !important;
+  }
+
+  .hashtags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .short-actions {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+  }
+
+  .short-actions .btn { width: auto; }
+
+  .cut-status {
+    font-size: 12px;
+    color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cut-all-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    align-items: center;
+  }
+
+  .cut-all-bar p { flex: 1; font-size: 13px; color: var(--muted); }
+
+  /* Minnal schedule drawer */
+  .schedule-drawer {
+    border-top: 1px solid var(--border);
+    padding: 16px 20px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    background: #0d0d16;
+  }
+  .schedule-drawer.open { display: flex; }
+  .schedule-drawer label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+  .schedule-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .schedule-drawer select, .schedule-drawer input[type=datetime-local] {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif;
+    font-size: 12px; padding: 8px 10px; width: 100%; outline: none;
+  }
+  .btn-minnal {
+    background: #5865f2; color: white; border: none; border-radius: 6px;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px;
+    font-weight: 500; padding: 8px 14px; transition: background 0.2s;
+  }
+  .btn-minnal:hover { background: #6c79f5; }
+  .btn-minnal:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .badge-ok { color: var(--success); font-size: 11px; }
+  .badge-err { color: var(--error); font-size: 11px; }
+
+  .ffmpeg-box {
+    background: #050508;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: #7a7a9a;
+    word-break: break-all;
+    margin-top: 8px;
+  }
+
+  /* Settings modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 1000; display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; width: 480px; max-width: 95vw;
+    padding: 28px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; color: var(--accent); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tab {
+    background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; padding: 8px 16px; margin-bottom: -1px; transition: all 0.15s;
+  }
+  .tab.active { border-bottom-color: var(--accent); color: var(--accent); }
+  .tab-panel { display: none; flex-direction: column; gap: 14px; }
+  .tab-panel.active { display: flex; }
+  .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .hint code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'DM Mono', monospace; }
+  .modal-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .modal-actions .btn { flex: 1; }
+  #settingsSaveStatus { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <div class="modal-title">⚙️ Settings</div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('gemini')">Gemini</button>
+      <button class="tab" onclick="switchTab('ollama')">Ollama</button>
+      <button class="tab" onclick="switchTab('minnal')">Minnal</button>
+    </div>
+
+    <!-- Gemini tab -->
+    <div class="tab-panel active" id="tab-gemini">
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="s-gemini-key" placeholder="AIza..." />
+      </div>
+      <p class="hint">Get a free key at <span style="color:var(--accent)">aistudio.google.com/app/apikey</span> — no credit card needed.</p>
+    </div>
+
+    <!-- Ollama tab -->
+    <div class="tab-panel" id="tab-ollama">
+      <div class="field">
+        <label>Ollama Host</label>
+        <input type="text" id="s-ollama-host" placeholder="http://localhost:11434" />
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <input type="text" id="s-ollama-model" placeholder="gemma4:31b-cloud" />
+      </div>
+      <p class="hint">
+        Install Ollama from <span style="color:var(--accent)">ollama.com</span>, then pull the model:<br>
+        <code>ollama pull gemma4:31b-cloud</code>
+      </p>
+    </div>
+
+    <!-- Minnal tab -->
+    <div class="tab-panel" id="tab-minnal">
+      <div class="field">
+        <label>Minnal API Key</label>
+        <input type="password" id="s-minnal-key" placeholder="sk_..." />
+      </div>
+      <p class="hint">Get your key at <span style="color:var(--accent)">app.minnal.io</span> → Settings → API Keys.</p>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      <span id="settingsSaveStatus"></span>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">TRAVEL SHORTS AI</div>
+  <div class="tagline">Turn your footage into stories</div>
+  <button onclick="openSettings()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px;transition:all 0.2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">⚙️ Settings</button>
+</header>
+
+<div class="main">
+
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+
+    <div>
+      <div class="section-label" id="aiProviderLabel">01 — AI</div>
+      <div class="api-status">
+        <div class="dot" id="keyDot"></div>
+        <span id="keyStatus">not set</span>
+      </div>
+      <p style="font-size:11px; color:var(--muted); margin-top:6px;" id="aiProviderHint"></p>
+      <p style="font-size:11px; color:var(--accent); margin-top:4px; cursor:pointer;" onclick="openSettings()">Open Settings to configure →</p>
+    </div>
+
+    <div>
+      <div class="section-label">02 — Video Folder</div>
+      <div class="field">
+        <label>Folder path (absolute)</label>
+        <input type="text" id="folderPath" placeholder="C:\Videos\Bali2026 or /home/user/videos" />
+      </div>
+      <button class="btn btn-secondary" style="margin-top:10px" id="scanBtn" onclick="scanFolder()">Scan Folder</button>
+      <p id="scanStatus" style="font-size:11px; color:var(--muted); margin-top:8px; display:none;"></p>
+    </div>
+
+    <div id="videoSection" style="display:none">
+      <div class="section-label">03 — Select Videos</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:12px; color:var(--muted)" id="videoCount"></span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:11px" onclick="selectAll()">All</button>
+          <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:11px" onclick="selectNone()">None</button>
+        </div>
+      </div>
+      <div class="video-list" id="videoList"></div>
+    </div>
+
+    <div>
+      <div class="section-label">04 — Trip Context</div>
+      <div class="field">
+        <label>Tell the AI about your trip</label>
+        <textarea id="tripContext" placeholder="e.g. Solo trip to Bali, Indonesia — March 2026. 10 days. Visited Ubud, Seminyak, Canggu. Lots of food, temples, rice fields, sunset sessions. Vibe: peaceful but adventurous."></textarea>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>
+      Analyze & Generate Plan
+    </button>
+    <button class="btn btn-secondary" id="stopBtn" onclick="stopAnalyze()" style="display:none; margin-top:8px; border-color:var(--error); color:var(--error);">
+      ⏹ Stop & Get Results So Far
+    </button>
+
+    <div id="minnalSection" style="display:none">
+      <div class="section-label">05 — Schedule via Minnal</div>
+      <div class="field">
+        <label>Minnal API Key</label>
+        <input type="password" id="minnalKey" placeholder="sk_..." oninput="onMinnalKeyInput(this.value)" />
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Brand</label>
+        <select id="minnalBrand" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 14px;width:100%;outline:none;">
+          <option value="">— load brands —</option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right" id="rightPanel">
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🎬</div>
+      <h2>READY WHEN YOU ARE</h2>
+      <p style="font-size:13px; text-align:center; max-width:300px">
+        Set your API key, scan a folder, pick your videos, add trip context — then hit Analyze.
+      </p>
+    </div>
+
+    <div id="analyzeCounter" style="display:none; font-family:'DM Mono',monospace; font-size:13px; color:var(--accent); font-weight:500; margin-bottom:8px;"></div>
+    <div class="progress-box" id="progressBox"></div>
+
+    <div id="planOutput" style="display:none"></div>
+
+  </div>
+</div>
+
+<script>
+  let videos = [];
+  let selectedVideos = new Set();
+  let planData = null;
+  let progressInterval = null;
+
+  refreshAiStatus();
+
+  async function saveKey() {
+    const key = document.getElementById('apiKey').value.trim();
+    if (!key) return;
+    const r = await fetch('/api/set-key', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({api_key: key})
+    });
+    if (r.ok) {
+      document.getElementById('keyDot').classList.add('ok');
+      document.getElementById('keyStatus').textContent = 'set';
+      checkAnalyzeBtn();
+    }
+  }
+
+  async function scanFolder() {
+    const folder = document.getElementById('folderPath').value.trim();
+    if (!folder) return;
+
+    const btn = document.getElementById('scanBtn');
+    const status = document.getElementById('scanStatus');
+    btn.disabled = true;
+    btn.textContent = 'Scanning…';
+    status.style.display = 'block';
+    status.textContent = 'Reading folder…';
+
+    try {
+      const r = await fetch('/api/scan-folder', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({folder})
+      });
+      const data = await r.json();
+      if (data.error) { status.textContent = `✗ ${data.error}`; return; }
+
+      videos = data.videos;
+      selectedVideos = new Set(videos.map(v => v.path));
+      renderVideoList();
+      document.getElementById('videoSection').style.display = 'block';
+      document.getElementById('videoCount').textContent = `${videos.length} videos found`;
+      status.textContent = `✓ ${videos.length} videos found`;
+      status.style.color = 'var(--success)';
+      checkAnalyzeBtn();
+    } catch(e) {
+      status.textContent = `✗ ${e.message}`;
+      status.style.color = 'var(--error)';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Scan Folder';
+    }
+  }
+
+  function renderVideoList() {
+    const list = document.getElementById('videoList');
+    list.innerHTML = '';
+    videos.forEach(v => {
+      const item = document.createElement('div');
+      item.className = 'video-item' + (selectedVideos.has(v.path) ? ' selected' : '');
+      item.innerHTML = `
+        <input type="checkbox" ${selectedVideos.has(v.path) ? 'checked' : ''} onchange="toggleVideo('${v.path}', this.checked)">
+        <div class="video-info">
+          <div class="video-name">${v.filename}</div>
+          <div class="video-meta">${v.duration_str || '?'} · ${v.size_mb || '?'} MB · ${(v.creation_time||'').slice(0,10)||'unknown date'}</div>
+        </div>
+      `;
+      item.onclick = (e) => {
+        if (e.target.type !== 'checkbox') {
+          const cb = item.querySelector('input');
+          cb.checked = !cb.checked;
+          toggleVideo(v.path, cb.checked);
+        }
+      };
+      list.appendChild(item);
+    });
+  }
+
+  function toggleVideo(path, checked) {
+    if (checked) selectedVideos.add(path);
+    else selectedVideos.delete(path);
+    document.querySelectorAll('.video-item').forEach((el, i) => {
+      el.classList.toggle('selected', selectedVideos.has(videos[i].path));
+    });
+    checkAnalyzeBtn();
+  }
+
+  function selectAll() { selectedVideos = new Set(videos.map(v=>v.path)); renderVideoList(); checkAnalyzeBtn(); }
+  function selectNone() { selectedVideos.clear(); renderVideoList(); checkAnalyzeBtn(); }
+
+  function checkAnalyzeBtn() {
+    const hasKey = document.getElementById('keyDot').classList.contains('ok');
+    const hasVideos = selectedVideos.size > 0;
+    document.getElementById('analyzeBtn').disabled = !(hasKey && hasVideos);
+  }
+
+  function startProgressPolling() {
+    const box = document.getElementById('progressBox');
+    const counter = document.getElementById('analyzeCounter');
+    box.classList.add('active');
+    box.innerHTML = '';
+    counter.style.display = 'none';
+    let lastCount = 0;
+    progressInterval = setInterval(async () => {
+      const r = await fetch('/api/progress');
+      const d = await r.json();
+      const logs = d.logs || [];
+      if (logs.length > lastCount) {
+        for (let i = lastCount; i < logs.length; i++) {
+          const line = document.createElement('div');
+          line.className = 'progress-line';
+          line.textContent = logs[i];
+          box.appendChild(line);
+        }
+        box.scrollTop = box.scrollHeight;
+        lastCount = logs.length;
+      }
+      if (d.total > 0) {
+        counter.style.display = 'block';
+        counter.textContent = `${d.current} / ${d.total} videos analysed`;
+      }
+    }, 800);
+  }
+
+  function stopProgressPolling() {
+    if (progressInterval) clearInterval(progressInterval);
+    document.getElementById('analyzeCounter').style.display = 'none';
+  }
+
+  async function stopAnalyze() {
+    const stopBtn = document.getElementById('stopBtn');
+    stopBtn.disabled = true;
+    stopBtn.textContent = 'Stopping after current video…';
+    await fetch('/api/stop-analyze', { method: 'POST' });
+  }
+
+  async function analyze() {
+    const btn = document.getElementById('analyzeBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+    stopBtn.style.display = 'block';
+    stopBtn.disabled = false;
+    stopBtn.textContent = '⏹ Stop & Get Results So Far';
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('planOutput').style.display = 'none';
+    startProgressPolling();
+
+    const tripContext = document.getElementById('tripContext').value;
+    const r = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        videos: Array.from(selectedVideos),
+        trip_context: tripContext
+      })
+    });
+
+    stopProgressPolling();
+    document.getElementById('progressBox').classList.remove('active');
+    document.getElementById('stopBtn').style.display = 'none';
+
+    const data = await r.json();
+    btn.disabled = false;
+    btn.innerHTML = 'Analyze & Generate Plan';
+
+    if (data.error) { alert(data.error); return; }
+    planData = data;
+    renderPlan(data);
+    document.getElementById('minnalSection').style.display = 'block';
+  }
+
+  function renderPlan(data) {
+    const plan = data.plan || {};
+    const shorts = plan.shorts || [];
+    const out = document.getElementById('planOutput');
+
+    let html = `
+      <div class="plan-header">
+        <div class="series-title">${plan.series_title || 'YOUR TRAVEL SERIES'}</div>
+        <p class="narrative">${plan.narrative || ''}</p>
+        ${plan.posting_schedule ? `<span class="schedule-badge">📅 ${plan.posting_schedule}</span>` : ''}
+      </div>
+
+      <div class="cut-all-bar">
+        <p>${shorts.length} shorts ready — cut all clips at once to your output folder</p>
+        <button class="btn btn-secondary" style="width:auto" onclick="downloadPlan()">📋 Download Plan</button>
+        <button class="btn btn-danger" style="width:auto" onclick="cutAll()">✂️ Cut All Clips</button>
+      </div>
+
+      <div class="shorts-grid">
+    `;
+
+    shorts.forEach((s, i) => {
+      const tags = (s.hashtags || []).map(t => `<span class="tag">${t}</span>`).join('');
+      html += `
+        <div class="short-card" id="card-${i}">
+          <div class="short-header">
+            <div class="short-number">${String(i+1).padStart(2,'0')}</div>
+            <div class="short-title-block">
+              <div class="short-title">${s.title || 'Untitled'}</div>
+              <div class="short-source">${s.source_video ? s.source_video.split(/[/\\]/).pop() : 'unknown'}</div>
+            </div>
+            <div class="time-badge">${s.start_time || '0:00'} → ${s.end_time || '0:45'}</div>
+          </div>
+          <div class="short-body">
+            <div class="short-field" style="grid-column:1/-1">
+              <label>Hook</label>
+              <p class="hook-text">"${s.hook || ''}"</p>
+            </div>
+            <div class="short-field">
+              <label>Caption</label>
+              <p>${s.caption || ''}</p>
+            </div>
+            <div class="short-field">
+              <label>Hashtags</label>
+              <div class="hashtags">${tags}</div>
+            </div>
+            ${s.ffmpeg_command ? `
+            <div class="short-field" style="grid-column:1/-1">
+              <label>FFmpeg Command</label>
+              <div class="ffmpeg-box">${s.ffmpeg_command}</div>
+            </div>` : ''}
+          </div>
+          <div class="short-actions">
+            <button class="btn btn-secondary" onclick="cutClip(${i})">✂️ Cut This Clip</button>
+            <button class="btn btn-minnal" style="width:auto" onclick="toggleScheduleDrawer(${i})">📅 Schedule</button>
+            <span class="cut-status" id="status-${i}" style="display:none">✓ Saved</span>
+          </div>
+          <div class="schedule-drawer" id="drawer-${i}">
+            <div class="schedule-row">
+              <div>
+                <label>Platform</label>
+                <select id="plat-${i}">
+                  <option value="instagram">Instagram</option>
+                  <option value="linkedin">LinkedIn</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="reddit">Reddit</option>
+                </select>
+              </div>
+              <div>
+                <label>Schedule for</label>
+                <input type="datetime-local" id="dt-${i}" />
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px">
+              <button class="btn-minnal" onclick="scheduleToMinnal(${i})" id="sched-btn-${i}">Post to Minnal</button>
+              <span id="sched-status-${i}" style="font-size:12px; color:var(--muted)"></span>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    out.innerHTML = html;
+    out.style.display = 'block';
+  }
+
+  function resolveSourcePath(sourceVideo) {
+    const analyses = planData?.analyses || [];
+    const sv = sourceVideo || '';
+    const hit = analyses.find(a =>
+      a.video === sv ||
+      (a.video || '').replace(/\\/g, '/').endsWith(sv.replace(/\\/g, '/')) ||
+      sv.replace(/\\/g, '/').endsWith((a.meta?.filename || ''))
+    );
+    if (hit) return hit.video;
+    return Array.from(selectedVideos).find(p => p.includes(sv)) || sv;
+  }
+
+  async function cutClip(index) {
+    const shorts = planData?.plan?.shorts || [];
+    const s = shorts[index];
+    if (!s) return;
+
+    const sourceVideo = resolveSourcePath(s.source_video);
+
+    const r = await fetch('/api/cut-clip', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        input_path: sourceVideo,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        title: `Short_${index+1}_${(s.title||'clip').replace(/[^a-zA-Z0-9]/g,'_')}`
+      })
+    });
+    const d = await r.json();
+    const statusEl = document.getElementById(`status-${index}`);
+    statusEl.style.display = 'flex';
+    if (d.ok) {
+      statusEl.innerHTML = `✓ Saved to output/`;
+      statusEl.style.color = 'var(--success)';
+    } else {
+      statusEl.innerHTML = `✗ ${d.error || 'Failed'}`;
+      statusEl.style.color = 'var(--error)';
+    }
+  }
+
+  function downloadPlan() {
+    const plan = planData?.plan || {};
+    const shorts = plan.shorts || [];
+
+    const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
+
+    const headers = ['Order', 'Video File', 'Start', 'End', 'Title', 'Hook', 'Caption', 'Hashtags'];
+    const rows = shorts.map(s => [
+      s.order || '',
+      (s.source_video || '').split(/[/\\]/).pop(),
+      s.start_time || '',
+      s.end_time || '',
+      s.title || '',
+      s.hook || '',
+      s.caption || '',
+      (s.hashtags || []).join(' ')
+    ].map(escape).join(','));
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(plan.series_title || 'travel-shorts-plan').replace(/[^a-z0-9]/gi, '_')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function cutAll() {
+    const shorts = planData?.plan?.shorts || [];
+    const enriched = shorts.map(s => ({
+      ...s,
+      source_video: resolveSourcePath(s.source_video)
+    }));
+
+    const r = await fetch('/api/cut-all', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({shorts: enriched})
+    });
+    const d = await r.json();
+    d.results.forEach((res, i) => {
+      const statusEl = document.getElementById(`status-${i}`);
+      if (statusEl) {
+        statusEl.style.display = 'flex';
+        if (res.ok) {
+          statusEl.innerHTML = `✓ Saved`;
+          statusEl.style.color = 'var(--success)';
+        } else {
+          statusEl.innerHTML = `✗ ${res.error || 'Failed'}`;
+          statusEl.style.color = 'var(--error)';
+        }
+      }
+    });
+    alert(`Done! Check the 'output' folder next to app.py`);
+  }
+
+  // ── Settings ────────────────────────────────────────────────────────────────
+
+  let _activeTab = 'gemini';
+
+  function openSettings() {
+    fetch('/api/settings').then(r => r.json()).then(d => {
+      document.getElementById('s-ollama-host').value  = d.ollama_host  || '';
+      document.getElementById('s-ollama-model').value = d.ollama_model || '';
+      switchTab(d.ai_provider === 'ollama' ? 'ollama' : 'gemini');
+    });
+    document.getElementById('settingsOverlay').classList.add('open');
+    document.getElementById('settingsSaveStatus').textContent = '';
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsOverlay').classList.remove('open');
+  }
+
+  function switchTab(name) {
+    _activeTab = name;
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      const tabs = ['gemini','ollama','minnal'];
+      t.classList.toggle('active', tabs[i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
+
+  async function saveSettings() {
+    const status = document.getElementById('settingsSaveStatus');
+    status.textContent = 'Saving…';
+    const body = {
+      ai_provider:    _activeTab === 'ollama' ? 'ollama' : 'gemini',
+      ollama_host:    document.getElementById('s-ollama-host').value.trim(),
+      ollama_model:   document.getElementById('s-ollama-model').value.trim(),
+    };
+    const geminiKey = document.getElementById('s-gemini-key').value.trim();
+    if (geminiKey) body.gemini_api_key = geminiKey;
+    const minnalKey = document.getElementById('s-minnal-key').value.trim();
+    if (minnalKey) body.minnal_api_key = minnalKey;
+
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      const d = await r.json();
+      if (d.ok) {
+        status.textContent = '✓ Saved';
+        status.style.color = 'var(--success)';
+        refreshAiStatus();
+        setTimeout(closeSettings, 800);
+      } else {
+        status.textContent = `✗ ${d.error}`;
+        status.style.color = 'var(--error)';
+      }
+    } catch(e) {
+      status.textContent = `✗ ${e.message}`;
+      status.style.color = 'var(--error)';
+    }
+  }
+
+  async function refreshAiStatus() {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const isOllama = d.provider === 'ollama';
+    document.getElementById('aiProviderLabel').textContent = isOllama ? `01 — ${d.model}` : '01 — Gemini API';
+    document.getElementById('aiProviderHint').innerHTML = isOllama
+      ? `Running via <span style="color:var(--accent)">Ollama</span>`
+      : `Powered by <span style="color:var(--accent)">Google Gemini</span>`;
+    const dot = document.getElementById('keyDot');
+    const ks  = document.getElementById('keyStatus');
+    if (d.key_set) { dot.classList.add('ok'); ks.textContent = 'connected'; checkAnalyzeBtn(); }
+    else           { dot.classList.remove('ok'); ks.textContent = 'not set'; }
+  }
+
+  // ── Minnal ──────────────────────────────────────────────────────────────────
+
+  let minnalBrands = [];
+
+  function onMinnalKeyInput(val) {
+    const key = (val || '').trim();
+    localStorage.setItem('minnalKey', key);
+    if (key.length > 10) loadMinnalBrands(key);
+  }
+
+  // Restore saved Minnal key on load
+  (function restoreMinnalKey() {
+    const saved = localStorage.getItem('minnalKey');
+    if (saved) {
+      const el = document.getElementById('minnalKey');
+      if (el) { el.value = saved; }
+    }
+  })();
+
+  async function loadMinnalBrands(key) {
+    const sel = document.getElementById('minnalBrand');
+    sel.innerHTML = '<option>Loading...</option>';
+    try {
+      const r = await fetch('/api/minnal/brands', {
+        headers: { 'X-Minnal-Key': key }
+      });
+      minnalBrands = await r.json();
+      sel.innerHTML = minnalBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    } catch(e) {
+      sel.innerHTML = '<option>Failed to load</option>';
+    }
+  }
+
+  function toggleScheduleDrawer(i) {
+    const drawer = document.getElementById(`drawer-${i}`);
+    drawer.classList.toggle('open');
+    // Set default datetime to tomorrow 9am
+    if (drawer.classList.contains('open')) {
+      const dt = document.getElementById(`dt-${i}`);
+      if (!dt.value) {
+        const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0);
+        dt.value = d.toISOString().slice(0, 16);
+      }
+    }
+  }
+
+  async function scheduleToMinnal(i) {
+    const key = document.getElementById('minnalKey')?.value.trim();
+    if (!key) { alert('Enter your Minnal API key in the left panel first.'); return; }
+    const brandId = document.getElementById('minnalBrand')?.value;
+    if (!brandId) { alert('Select a brand first.'); return; }
+
+    const shorts = planData?.plan?.shorts || [];
+    const s = shorts[i];
+    if (!s) return;
+
+    const platform = document.getElementById(`plat-${i}`).value;
+    const dtVal = document.getElementById(`dt-${i}`).value;
+    if (!dtVal) { alert('Pick a date and time.'); return; }
+
+    const content = [s.hook, s.caption, (s.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+    const btn = document.getElementById(`sched-btn-${i}`);
+    const statusEl = document.getElementById(`sched-status-${i}`);
+    btn.disabled = true;
+    statusEl.textContent = 'Scheduling…';
+
+    try {
+      const r = await fetch('/api/minnal/schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Minnal-Key': key },
+        body: JSON.stringify({
+          brand_id: brandId,
+          platform,
+          content,
+          scheduled_for: new Date(dtVal).toISOString()
+        })
+      });
+      const d = await r.json();
+      if (d.ok) {
+        statusEl.textContent = '✓ Scheduled';
+        statusEl.style.color = 'var(--success)';
+      } else {
+        statusEl.textContent = `✗ ${d.error || 'Failed'}`;
+        statusEl.style.color = 'var(--error)';
+        btn.disabled = false;
+      }
+    } catch(e) {
+      statusEl.textContent = `✗ ${e.message}`;
+      statusEl.style.color = 'var(--error)';
+      btn.disabled = false;
+    }
+  }
+</script>
+</body>
+</html>
