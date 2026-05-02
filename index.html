@@ -1026,9 +1026,9 @@
       </div>
 
       <div class="cut-all-bar">
-        <p>${shorts.length} shorts ready — cut all clips at once to your output folder</p>
+        <p id="cutAllStatus">${shorts.length} short${shorts.length !== 1 ? 's' : ''} ready — cut all clips to your output folder</p>
         <button class="btn btn-secondary" style="width:auto" onclick="downloadPlan()">📋 Download Plan</button>
-        <button class="btn btn-danger" style="width:auto" onclick="cutAll()">✂️ Cut All Clips</button>
+        <button class="btn btn-danger" style="width:auto" id="cutAllBtn" onclick="cutAll()">✂️ Cut All Clips</button>
       </div>
 
       <div class="shorts-grid">
@@ -1123,7 +1123,12 @@
     const s = shorts[index];
     if (!s) return;
 
-    // Build resolved segments list (support both new segments[] and legacy fields)
+    const btn      = document.querySelector(`#card-${index} .btn-secondary`);
+    const statusEl = document.getElementById(`status-${index}`);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Cutting…'; }
+    if (statusEl) { statusEl.style.display = 'none'; }
+
+    // Build resolved segments list
     const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
       source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
     }] : []);
@@ -1132,23 +1137,34 @@
       source_video: resolveSourcePath(seg.source_video)
     }));
 
-    const r = await fetch('/api/cut-clip', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        segments,
-        title: `Short_${index+1}_${(s.title||'clip').replace(/[^a-zA-Z0-9]/g,'_')}`
-      })
-    });
-    const d = await r.json();
-    const statusEl = document.getElementById(`status-${index}`);
-    statusEl.style.display = 'flex';
-    if (d.ok) {
-      statusEl.innerHTML = `✓ Saved to output/`;
-      statusEl.style.color = 'var(--success)';
-    } else {
-      statusEl.innerHTML = `✗ ${d.error || 'Failed'}`;
-      statusEl.style.color = 'var(--error)';
+    try {
+      const r = await fetch('/api/cut-clip', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          segments,
+          title: `Short_${index+1}_${(s.title||'clip').replace(/[^a-zA-Z0-9]/g,'_')}`
+        })
+      });
+      const d = await r.json();
+      if (statusEl) {
+        statusEl.style.display = 'flex';
+        if (d.ok) {
+          statusEl.innerHTML = `✓ Saved to output/`;
+          statusEl.style.color = 'var(--success)';
+        } else {
+          statusEl.innerHTML = `✗ ${d.error || 'Failed'}`;
+          statusEl.style.color = 'var(--error)';
+        }
+      }
+    } catch (e) {
+      if (statusEl) {
+        statusEl.style.display = 'flex';
+        statusEl.innerHTML = `✗ ${e.message}`;
+        statusEl.style.color = 'var(--error)';
+      }
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = '✂️ Cut This Clip'; }
     }
   }
 
@@ -1192,6 +1208,19 @@
 
   async function cutAll() {
     const shorts = planData?.plan?.shorts || [];
+    if (!shorts.length) { alert('No plan loaded — run Analyze first.'); return; }
+
+    const btn       = document.getElementById('cutAllBtn');
+    const statusTxt = document.getElementById('cutAllStatus');
+    const box       = document.getElementById('progressBox');
+
+    // ── Lock UI ────────────────────────────────────────────────────────────
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Cutting…';
+    box.innerHTML = '';
+    box.classList.add('active');
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
     const enriched = shorts.map(s => {
       const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
         source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
@@ -1205,26 +1234,86 @@
       };
     });
 
-    const r = await fetch('/api/cut-all', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({shorts: enriched})
-    });
-    const d = await r.json();
-    d.results.forEach((res, i) => {
-      const statusEl = document.getElementById(`status-${i}`);
-      if (statusEl) {
-        statusEl.style.display = 'flex';
-        if (res.ok) {
-          statusEl.innerHTML = `✓ Saved`;
-          statusEl.style.color = 'var(--success)';
-        } else {
-          statusEl.innerHTML = `✗ ${res.error || 'Failed'}`;
-          statusEl.style.color = 'var(--error)';
+    // ── Poll progress log while cutting ────────────────────────────────────
+    let lastLogCount = 0;
+    const pollId = setInterval(async () => {
+      try {
+        const pr = await fetch('/api/progress');
+        const pd = await pr.json();
+        const logs = pd.logs || [];
+        if (logs.length > lastLogCount) {
+          for (let i = lastLogCount; i < logs.length; i++) {
+            const line = document.createElement('div');
+            line.className = 'progress-line';
+            line.textContent = logs[i];
+            box.appendChild(line);
+          }
+          box.scrollTop = box.scrollHeight;
+          lastLogCount = logs.length;
         }
+      } catch { /* ignore poll errors */ }
+    }, 600);
+
+    try {
+      const r = await fetch('/api/cut-all', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({shorts: enriched})
+      });
+
+      clearInterval(pollId);
+
+      if (!r.ok) {
+        const txt = await r.text();
+        throw new Error(`Server error ${r.status}: ${txt.slice(0, 200)}`);
       }
-    });
-    alert(`Done! Check the 'output' folder next to app.py`);
+
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+
+      // ── Update per-card status ──────────────────────────────────────────
+      let okCount = 0, failCount = 0;
+      (d.results || []).forEach((res, i) => {
+        const el = document.getElementById(`status-${i}`);
+        if (el) {
+          el.style.display = 'flex';
+          if (res.ok) {
+            el.innerHTML = '✓ Saved';
+            el.style.color = 'var(--success)';
+            okCount++;
+          } else {
+            el.innerHTML = `✗ Failed`;
+            el.style.color = 'var(--error)';
+            failCount++;
+          }
+        }
+      });
+
+      statusTxt.textContent = failCount
+        ? `${okCount} saved, ${failCount} failed — see log above`
+        : `✓ ${okCount} clip${okCount !== 1 ? 's' : ''} saved to output/`;
+
+      // Show a final log line
+      const done = document.createElement('div');
+      done.className = 'progress-line';
+      done.textContent = failCount
+        ? `⚠ Done with ${failCount} error(s) — check messages above`
+        : `✓ All done! ${okCount} clip${okCount !== 1 ? 's' : ''} in the output folder.`;
+      box.appendChild(done);
+      box.scrollTop = box.scrollHeight;
+
+    } catch (e) {
+      clearInterval(pollId);
+      statusTxt.textContent = `✗ ${e.message}`;
+      const errLine = document.createElement('div');
+      errLine.className = 'progress-line';
+      errLine.textContent = `Error: ${e.message}`;
+      errLine.style.color = 'var(--error)';
+      box.appendChild(errLine);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '✂️ Cut All Clips';
+    }
   }
 
   // ── Settings ────────────────────────────────────────────────────────────────
