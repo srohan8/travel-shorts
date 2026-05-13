@@ -474,6 +474,128 @@
                 margin: 14px 0 4px;
             }
 
+            /* Vibe selector pills */
+            .vibe-pill {
+                padding: 5px 12px;
+                border-radius: 20px;
+                font-size: 12px;
+                cursor: pointer;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                color: var(--muted);
+                transition: all 0.15s;
+                font-family: "DM Sans", sans-serif;
+            }
+            .vibe-pill.active {
+                border-color: var(--accent);
+                color: var(--accent);
+                background: #1a1a0a;
+            }
+            .vibe-pill:hover {
+                border-color: var(--accent);
+                color: var(--text);
+            }
+
+            /* Travel Score ring */
+            .score-ring {
+                width: 52px;
+                height: 52px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 19px;
+                border: 3px solid var(--score-color, var(--border));
+                color: var(--score-color, var(--muted));
+                flex-shrink: 0;
+                cursor: pointer;
+                transition: transform 0.15s;
+                user-select: none;
+            }
+            .score-ring:hover { transform: scale(1.05); }
+            .score-breakdown {
+                display: none;
+                flex-direction: column;
+                gap: 6px;
+                padding: 12px 24px;
+                border-top: 1px solid var(--border);
+                background: #0d0d14;
+            }
+            .score-breakdown.open { display: flex; }
+            .score-row {
+                display: grid;
+                grid-template-columns: 80px 36px 1fr;
+                gap: 8px;
+                align-items: start;
+                font-size: 12px;
+            }
+            .score-row .s-label {
+                color: var(--muted);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-size: 10px;
+                padding-top: 2px;
+            }
+            .score-row .s-val {
+                font-family: "DM Mono", monospace;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .score-row .s-note { color: var(--muted); font-size: 11px; line-height: 1.4; }
+            .score-row.warn .s-val { color: var(--accent2); }
+            .score-row.good .s-val { color: var(--success); }
+
+            /* Mobile nav */
+            .mobile-nav {
+                display: none;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: var(--surface);
+                border-top: 1px solid var(--border);
+                z-index: 100;
+                height: 56px;
+            }
+            .mobile-nav button {
+                flex: 1;
+                background: none;
+                border: none;
+                color: var(--muted);
+                font-family: "DM Sans", sans-serif;
+                font-size: 13px;
+                cursor: pointer;
+                height: 100%;
+                border-top: 2px solid transparent;
+                transition: all 0.15s;
+            }
+            .mobile-nav button.active {
+                color: var(--accent);
+                border-top-color: var(--accent);
+            }
+            @media (max-width: 767px) {
+                .mobile-nav { display: flex; }
+                body { padding-bottom: 56px; }
+                .main { grid-template-columns: 1fr; min-height: unset; }
+                .panel-left {
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                    padding: 20px 16px;
+                    display: none;
+                }
+                .panel-right { padding: 20px 16px; display: none; }
+                .panel-left.mobile-active,
+                .panel-right.mobile-active { display: flex; }
+                header { padding: 16px 16px 12px; flex-wrap: wrap; gap: 10px; }
+                .logo img { height: 36px; }
+                .short-body { grid-template-columns: 1fr; }
+                .cut-all-bar { flex-direction: column; align-items: stretch; }
+            }
+            @media (min-width: 768px) {
+                .panel-left, .panel-right { display: flex !important; }
+            }
+
             .short-body {
                 padding: 20px 24px;
                 display: grid;
@@ -808,6 +930,12 @@
                     <button class="tab" onclick="switchTab('ollama')">
                         Ollama
                     </button>
+                    <button class="tab" onclick="switchTab('openai')">
+                        OpenAI
+                    </button>
+                    <button class="tab" onclick="switchTab('anthropic')">
+                        Anthropic
+                    </button>
                     <button class="tab" onclick="switchTab('minnal')">
                         Minnal
                     </button>
@@ -868,6 +996,56 @@
                         <span style="color: var(--accent)">ollama.com</span>,
                         then pull the model:<br />
                         <code>ollama pull gemma4:31b-cloud</code>
+                    </p>
+                </div>
+
+                <!-- OpenAI tab -->
+                <div class="tab-panel" id="tab-openai">
+                    <div class="field">
+                        <label>API Key</label>
+                        <input
+                            type="password"
+                            id="s-openai-key"
+                            placeholder="sk-..."
+                        />
+                    </div>
+                    <div class="field">
+                        <label>Model</label>
+                        <input
+                            type="text"
+                            id="s-openai-model"
+                            placeholder="gpt-4o-mini"
+                        />
+                    </div>
+                    <p class="hint">
+                        Get a key at
+                        <span style="color: var(--accent)">platform.openai.com/api-keys</span>.
+                        <code>gpt-4o-mini</code> is fast and cost-effective for video analysis.
+                    </p>
+                </div>
+
+                <!-- Anthropic tab -->
+                <div class="tab-panel" id="tab-anthropic">
+                    <div class="field">
+                        <label>API Key</label>
+                        <input
+                            type="password"
+                            id="s-anthropic-key"
+                            placeholder="sk-ant-..."
+                        />
+                    </div>
+                    <div class="field">
+                        <label>Model</label>
+                        <input
+                            type="text"
+                            id="s-anthropic-model"
+                            placeholder="claude-haiku-4-5-20251001"
+                        />
+                    </div>
+                    <p class="hint">
+                        Get a key at
+                        <span style="color: var(--accent)">console.anthropic.com</span>.
+                        Claude Haiku is the fastest and most affordable option.
                     </p>
                 </div>
 
@@ -1221,6 +1399,14 @@
                             id="tripContext"
                             placeholder="e.g. Solo trip to Bali, Indonesia — March 2026. 10 days. Visited Ubud, Seminyak, Canggu. Lots of food, temples, rice fields, sunset sessions. Vibe: peaceful but adventurous."
                         ></textarea>
+                    </div>
+                    <label style="font-size:12px;color:var(--muted);margin-top:12px;display:block">Vibe</label>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+                        <button class="vibe-pill active" data-vibe="cinematic" onclick="setVibe('cinematic')">Cinematic</button>
+                        <button class="vibe-pill" data-vibe="funny" onclick="setVibe('funny')">Funny</button>
+                        <button class="vibe-pill" data-vibe="storytelling" onclick="setVibe('storytelling')">Storytelling</button>
+                        <button class="vibe-pill" data-vibe="informative" onclick="setVibe('informative')">Informative</button>
+                        <button class="vibe-pill" data-vibe="raw & real" onclick="setVibe('raw & real')">Raw &amp; Real</button>
                     </div>
                 </div>
 
@@ -1612,6 +1798,7 @@
                     body: JSON.stringify({
                         videos: Array.from(selectedVideos),
                         trip_context: tripContext,
+                        vibe: _selectedVibe,
                     }),
                 });
 
@@ -1633,8 +1820,9 @@
                 }
                 planData = data;
                 renderPlan(data);
-                document.getElementById("minnalSection").style.display =
-                    "block";
+                document.getElementById("minnalSection").style.display = "block";
+                // Auto-switch to Plan panel on mobile
+                if (window.innerWidth < 768) switchMobilePanel("plan");
             }
 
             function renderPlan(data) {
@@ -1681,6 +1869,7 @@
                             return `<span class="seg-badge">▶ ${name} &nbsp;${seg.start_time || "0:00"}–${seg.end_time || "0:30"}</span>`;
                         })
                         .join("");
+                    const scoreRing = renderScore(s.travel_score);
                     html += `
         <div class="short-card" id="card-${i}">
           <div class="short-header">
@@ -1689,7 +1878,9 @@
               <div class="short-title">${s.title || "Untitled"}</div>
               <div class="segments-list">${segHtml}</div>
             </div>
+            ${scoreRing.ring}
           </div>
+          ${scoreRing.breakdown}
           <div class="short-body">
             <div class="short-field" style="grid-column:1/-1">
               <label>Hook</label>
@@ -2277,17 +2468,14 @@
                     .then((r) => r.json())
                     .then((d) => {
                         _aiProvider = d.ai_provider || "gemini";
-                        document.getElementById("s-ollama-host").value =
-                            d.ollama_host || "";
-                        document.getElementById("s-ollama-model").value =
-                            d.ollama_model || "";
-                        switchTab(
-                            _aiProvider === "ollama" ? "ollama" : "gemini",
-                        );
+                        document.getElementById("s-ollama-host").value = d.ollama_host || "";
+                        document.getElementById("s-ollama-model").value = d.ollama_model || "";
+                        document.getElementById("s-openai-model").value = d.openai_model || "gpt-4o-mini";
+                        document.getElementById("s-anthropic-model").value = d.anthropic_model || "claude-haiku-4-5-20251001";
+                        const providerToTab = { gemini: "gemini", ollama: "ollama", openai: "openai", anthropic: "anthropic" };
+                        switchTab(providerToTab[_aiProvider] || "gemini");
                     });
-                document
-                    .getElementById("settingsOverlay")
-                    .classList.add("open");
+                document.getElementById("settingsOverlay").classList.add("open");
                 document.getElementById("settingsSaveStatus").textContent = "";
             }
 
@@ -2299,10 +2487,11 @@
 
             function switchTab(name) {
                 _activeTab = name;
-                // Only update the actual AI provider when user explicitly picks Gemini or Ollama
-                if (name === "gemini" || name === "ollama") _aiProvider = name;
+                // Update AI provider when an AI provider tab is selected
+                const providerTabs = ["gemini", "ollama", "openai", "anthropic"];
+                if (providerTabs.includes(name)) _aiProvider = name;
                 document.querySelectorAll(".tab").forEach((t, i) => {
-                    const tabs = ["gemini", "ollama", "minnal"];
+                    const tabs = ["gemini", "ollama", "openai", "anthropic", "minnal"];
                     t.classList.toggle("active", tabs[i] === name);
                 });
                 document
@@ -2316,20 +2505,18 @@
                 status.textContent = "Saving…";
                 const body = {
                     ai_provider: _aiProvider,
-                    ollama_host: document
-                        .getElementById("s-ollama-host")
-                        .value.trim(),
-                    ollama_model: document
-                        .getElementById("s-ollama-model")
-                        .value.trim(),
+                    ollama_host: document.getElementById("s-ollama-host").value.trim(),
+                    ollama_model: document.getElementById("s-ollama-model").value.trim(),
+                    openai_model: document.getElementById("s-openai-model").value.trim(),
+                    anthropic_model: document.getElementById("s-anthropic-model").value.trim(),
                 };
-                const geminiKey = document
-                    .getElementById("s-gemini-key")
-                    .value.trim();
+                const geminiKey = document.getElementById("s-gemini-key").value.trim();
                 if (geminiKey) body.gemini_api_key = geminiKey;
-                const minnalKey = document
-                    .getElementById("s-minnal-key")
-                    .value.trim();
+                const openaiKey = document.getElementById("s-openai-key").value.trim();
+                if (openaiKey) body.openai_api_key = openaiKey;
+                const anthropicKey = document.getElementById("s-anthropic-key").value.trim();
+                if (anthropicKey) body.anthropic_api_key = anthropicKey;
+                const minnalKey = document.getElementById("s-minnal-key").value.trim();
                 if (minnalKey) body.minnal_api_key = minnalKey;
 
                 try {
@@ -2395,12 +2582,15 @@
             async function refreshAiStatus() {
                 const r = await fetch("/api/status");
                 const d = await r.json();
-                const isOllama = d.provider === "ollama";
-                document.getElementById("aiProviderLabel").textContent =
-                    isOllama ? `01 — ${d.model}` : "01 — Gemini API";
-                document.getElementById("aiProviderHint").innerHTML = isOllama
-                    ? `Running via <span style="color:var(--accent)">Ollama</span>`
-                    : `Powered by <span style="color:var(--accent)">Google Gemini</span>`;
+                const providerLabels = {
+                    gemini:    ["01 — Gemini API", `Powered by <span style="color:var(--accent)">Google Gemini</span>`],
+                    ollama:    [`01 — ${d.model}`, `Running via <span style="color:var(--accent)">Ollama</span>`],
+                    openai:    [`01 — ${d.model || "OpenAI"}`, `Powered by <span style="color:var(--accent)">OpenAI</span>`],
+                    anthropic: [`01 — ${d.model || "Anthropic"}`, `Powered by <span style="color:var(--accent)">Anthropic</span>`],
+                };
+                const [label, hint] = providerLabels[d.provider] || providerLabels.gemini;
+                document.getElementById("aiProviderLabel").textContent = label;
+                document.getElementById("aiProviderHint").innerHTML = hint;
                 const dot = document.getElementById("keyDot");
                 const ks = document.getElementById("keyStatus");
                 if (d.key_set) {
@@ -2412,6 +2602,75 @@
                     ks.textContent = "not set";
                 }
             }
+
+            // ── Vibe selector ───────────────────────────────────────────────────────────
+
+            let _selectedVibe = "cinematic";
+
+            function setVibe(v) {
+                _selectedVibe = v;
+                document.querySelectorAll(".vibe-pill").forEach((el) =>
+                    el.classList.toggle("active", el.dataset.vibe === v)
+                );
+            }
+
+            // ── Travel Score ─────────────────────────────────────────────────────────────
+
+            function scoreColor(n) {
+                if (n >= 75) return "var(--success)";
+                if (n >= 50) return "var(--accent)";
+                return "var(--accent2)";
+            }
+
+            function renderScore(ts) {
+                if (!ts || ts.total === undefined) return { ring: "", breakdown: "" };
+                const total = ts.total || 0;
+                const subs = ["hook", "arc", "diversity", "pacing", "visual"];
+                const labels = { hook: "Hook", arc: "Arc", diversity: "Diversity", pacing: "Pacing", visual: "Visual" };
+                const rows = subs.map((k) => {
+                    const s = ts[k] || {};
+                    const score = s.score ?? 0;
+                    const cls = score >= 75 ? "good" : score < 50 ? "warn" : "";
+                    return `<div class="score-row ${cls}">
+                        <span class="s-label">${labels[k]}</span>
+                        <span class="s-val">${s.score ?? "–"}</span>
+                        <span class="s-note">${s.note || ""}</span>
+                    </div>`;
+                }).join("");
+                const color = scoreColor(total);
+                const ring = `<div class="score-ring" style="--score-color:${color}" onclick="toggleScoreBreakdown(event, this)" title="Travel Score — click for breakdown">${total}</div>`;
+                const breakdown = `<div class="score-breakdown"><div style="font-size:10px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px">Travel Score breakdown</div>${rows}</div>`;
+                return { ring, breakdown };
+            }
+
+            function toggleScoreBreakdown(e, ring) {
+                e.stopPropagation();
+                const card = ring.closest(".short-card");
+                if (card) card.querySelector(".score-breakdown")?.classList.toggle("open");
+            }
+
+            // ── Mobile panel switching ───────────────────────────────────────────────────
+
+            function switchMobilePanel(panel) {
+                const left = document.querySelector(".panel-left");
+                const right = document.querySelector(".panel-right");
+                const setupBtn = document.getElementById("mobileSetupBtn");
+                const planBtn = document.getElementById("mobilePlanBtn");
+                if (panel === "setup") {
+                    left.classList.add("mobile-active");
+                    right.classList.remove("mobile-active");
+                    setupBtn && setupBtn.classList.add("active");
+                    planBtn && planBtn.classList.remove("active");
+                } else {
+                    right.classList.add("mobile-active");
+                    left.classList.remove("mobile-active");
+                    planBtn && planBtn.classList.add("active");
+                    setupBtn && setupBtn.classList.remove("active");
+                }
+            }
+
+            // Initialise mobile panels on load
+            if (window.innerWidth < 768) switchMobilePanel("setup");
 
             // ── Minnal ──────────────────────────────────────────────────────────────────
 
@@ -2532,6 +2791,12 @@
                 }
             }
         </script>
+
+        <!-- Mobile bottom nav -->
+        <nav class="mobile-nav" id="mobileNav">
+            <button class="active" onclick="switchMobilePanel('setup')" id="mobileSetupBtn">📋 Setup</button>
+            <button onclick="switchMobilePanel('plan')" id="mobilePlanBtn">🎬 Plan</button>
+        </nav>
 
         <!-- History drawer -->
         <div id="historyDrawer" style="position:fixed;top:0;right:-380px;width:360px;height:100vh;background:var(--surface);border-left:1px solid var(--border);z-index:500;transition:right .25s ease;padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:12px">

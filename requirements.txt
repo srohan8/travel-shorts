@@ -4,3 +4,7 @@ Pillow
 python-dotenv
 ollama
 opencv-python-headless
+openai
+anthropic
+gunicorn
+psycopg2-binary

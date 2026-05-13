@@ -54,6 +54,10 @@ AI_PROVIDER    = os.environ.get("AI_PROVIDER", "gemini")
 OLLAMA_MODEL   = os.environ.get("OLLAMA_MODEL", "gemma4:31b-cloud")
 OLLAMA_HOST    = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 MINNAL_API_KEY = os.environ.get("MINNAL_API_KEY", "")
+OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL      = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL   = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 MINNAL_BASE    = "https://app.minnal.io"
 
 # Output / filter settings
@@ -155,6 +159,43 @@ def extract_frames(video_path, num_frames=None):
                     })
     return frames
 
+ANALYZE_PROMPT = """You are a travel content analyst. Analyze these frames from a travel video.
+
+Trip context: {trip_context}
+Video file: {filename}
+
+For each frame, identify:
+- What is happening (scene description)
+- Location/setting (beach, city, restaurant, landmark, etc.)
+- Mood/energy (calm, exciting, funny, scenic, etc.)
+- YouTube Shorts potential (high/medium/low) and why
+
+Then suggest 1-3 specific clips from this video for YouTube Shorts, with:
+- Suggested start/end timestamps (estimate based on frame positions)
+- Short title (max 6 words)
+- Hook line (first sentence to grab attention)
+- Caption (2-3 sentences)
+- 5 hashtags
+
+Respond in this exact JSON format:
+{{
+  "scenes": [
+    {{"timestamp": "0:30", "description": "...", "setting": "...", "mood": "...", "shorts_potential": "high/medium/low"}}
+  ],
+  "suggested_clips": [
+    {{
+      "title": "...",
+      "start_time": "0:00",
+      "end_time": "0:30",
+      "hook": "...",
+      "caption": "...",
+      "hashtags": ["#travel", "#..."],
+      "why": "..."
+    }}
+  ]
+}}"""
+
+
 def analyze_video_with_gemini(video_path, trip_context, frames):
     """Send frames to Gemini for analysis"""
     client = google_genai.Client(api_key=GEMINI_API_KEY)
@@ -235,7 +276,47 @@ Respond in this exact JSON format:
         return json.loads(json_match.group())
     return {"scenes": [], "suggested_clips": [], "raw": text}
 
-def generate_shorts_plan(all_analyses, trip_context, video_metas):
+def analyze_video_with_openai(video_path, trip_context, frames):
+    """Send frames to OpenAI for analysis"""
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    prompt_text = ANALYZE_PROMPT.format(trip_context=trip_context, filename=Path(video_path).name)
+    messages = [{
+        "role": "user",
+        "content": [
+            {"type": "text", "text": prompt_text},
+            *[{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{f['data']}", "detail": "low"}}
+              for f in frames]
+        ]
+    }]
+    resp = client.chat.completions.create(model=OPENAI_MODEL, messages=messages, max_tokens=1500)
+    text = resp.choices[0].message.content
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        return json.loads(json_match.group())
+    return {"scenes": [], "suggested_clips": [], "raw": text}
+
+
+def analyze_video_with_anthropic(video_path, trip_context, frames):
+    """Send frames to Anthropic Claude for analysis"""
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    prompt_text = ANALYZE_PROMPT.format(trip_context=trip_context, filename=Path(video_path).name)
+    content = [
+        {"type": "text", "text": prompt_text},
+        *[{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": f["data"]}}
+          for f in frames]
+    ]
+    resp = client.messages.create(model=ANTHROPIC_MODEL, max_tokens=1500,
+                                   messages=[{"role": "user", "content": content}])
+    text = resp.content[0].text
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        return json.loads(json_match.group())
+    return {"scenes": [], "suggested_clips": [], "raw": text}
+
+
+def generate_shorts_plan(all_analyses, trip_context, video_metas, vibe="cinematic"):
     """Generate overall YouTube Shorts content plan"""
     client = google_genai.Client(api_key=GEMINI_API_KEY)
 
@@ -249,38 +330,7 @@ def generate_shorts_plan(all_analyses, trip_context, video_metas):
         ]
     }, indent=2)
 
-    prompt = f"""Based on this travel video analysis, create a YouTube Shorts content plan.
-
-{summary}
-
-IMPORTANT: For source_video in each segment, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
-
-Create a content strategy with:
-1. Overall trip narrative (2-3 sentences)
-2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short (the ideal length for YouTube Shorts). Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
-3. Posting schedule suggestion (one post per day or every other day)
-4. Series title and theme
-
-Respond in JSON:
-{{
-  "series_title": "...",
-  "narrative": "...",
-  "posting_schedule": "...",
-  "shorts": [
-    {{
-      "order": 1,
-      "title": "...",
-      "segments": [
-        {{"source_video": "filename.mp4", "start_time": "0:10", "end_time": "0:25"}},
-        {{"source_video": "filename2.mp4", "start_time": "1:05", "end_time": "1:20"}},
-        {{"source_video": "filename3.mp4", "start_time": "0:45", "end_time": "1:05"}}
-      ],
-      "hook": "...",
-      "caption": "...",
-      "hashtags": ["#..."]
-    }}
-  ]
-}}"""
+    prompt = _build_plan_prompt(summary, vibe)
 
     response = client.models.generate_content(
         model="gemini-2.0-flash-lite",
@@ -345,7 +395,7 @@ Respond in this exact JSON format:
         return json.loads(json_match.group())
     return {"scenes": [], "suggested_clips": [], "raw": text}
 
-def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas):
+def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas, vibe="cinematic"):
     summary = json.dumps({
         "trip_context": trip_context,
         "videos_analyzed": len(all_analyses),
@@ -356,17 +406,59 @@ def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas):
         ]
     }, indent=2)
 
-    prompt = f"""Based on this travel video analysis, create a YouTube Shorts content plan.
+    prompt = _build_plan_prompt(summary, vibe)
+
+    client = ollama_client.Client(host=OLLAMA_HOST)
+    response = client.chat(
+        model=OLLAMA_MODEL,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    text = response.message.content
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        return json.loads(json_match.group())
+    return {"shorts": [], "raw": text}
+
+def _build_plan_prompt(summary, vibe="cinematic"):
+    vibe_defs = {
+        "cinematic": "evocative, atmospheric, 'made for the big screen'",
+        "funny": "light, self-aware, playful — never cringe",
+        "storytelling": "first-person narrative, personal journey, emotional",
+        "informative": "practical, tip-focused, 'here's what I learned'",
+        "raw & real": "unfiltered, honest, anti-highlight-reel",
+    }
+    vibe_desc = vibe_defs.get(vibe, vibe)
+    travel_score_schema = '''"travel_score": {
+      "total": 0,
+      "hook":      { "score": 0, "note": "..." },
+      "arc":       { "score": 0, "note": "..." },
+      "diversity": { "score": 0, "note": "..." },
+      "pacing":    { "score": 0, "note": "..." },
+      "visual":    { "score": 0, "note": "..." }
+    }'''
+    return f"""Based on this travel video analysis, create a YouTube Shorts content plan.
 
 {summary}
 
 IMPORTANT: For source_video in each segment, you MUST copy the exact filename from the source_video field in all_clips above. Do not invent or shorten filenames.
 
+Tone & voice: Write all hooks and captions in a {vibe} style — {vibe_desc}.
+Hook structure: Each hook should be a setup in the first line that pays off in the final sentence of the caption. Don't write generic travel lines — write for the specific moments in this footage.
+
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short (the ideal length for YouTube Shorts). Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
+2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short. Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
 3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
+
+For each Short, add a "travel_score" object with scores 0-100 for:
+- hook: Does segment 1 open with a visual wow moment? Penalise walking/establishing shots with no action.
+- arc: Does the Short tell a mini story (arrival -> exploration -> payoff)? Penalise all-one-mood clips.
+- diversity: Count distinct scene types (aerial, ground, food, people, landmark). More = higher score.
+- pacing: Average segment duration — 2-6s = 100, 7-10s = 70, 11-15s = 40, 16s+ = 20.
+- visual: Infer from scene descriptions — golden hour / bright / sharp = high; dark / flat / blurry = low.
+- total: Weighted average (hook 30%, arc 25%, diversity 20%, pacing 15%, visual 10%).
+Include a one-sentence coaching "note" for each sub-score explaining the rating.
 
 Respond in JSON:
 {{
@@ -379,26 +471,66 @@ Respond in JSON:
       "title": "...",
       "segments": [
         {{"source_video": "filename.mp4", "start_time": "0:10", "end_time": "0:25"}},
-        {{"source_video": "filename2.mp4", "start_time": "1:05", "end_time": "1:20"}},
-        {{"source_video": "filename3.mp4", "start_time": "0:45", "end_time": "1:05"}}
+        {{"source_video": "filename2.mp4", "start_time": "1:05", "end_time": "1:20"}}
       ],
       "hook": "...",
       "caption": "...",
-      "hashtags": ["#..."]
+      "hashtags": ["#..."],
+      {travel_score_schema}
     }}
   ]
 }}"""
 
-    client = ollama_client.Client(host=OLLAMA_HOST)
-    response = client.chat(
-        model=OLLAMA_MODEL,
-        messages=[{"role": "user", "content": prompt}]
+
+def generate_shorts_plan_openai(all_analyses, trip_context, video_metas, vibe="cinematic"):
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    summary = json.dumps({
+        "trip_context": trip_context,
+        "videos_analyzed": len(all_analyses),
+        "all_clips": [
+            {**clip, "source_video": Path(a.get("video", "")).name}
+            for a in all_analyses
+            for clip in a.get("suggested_clips", [])
+        ]
+    }, indent=2)
+    prompt = _build_plan_prompt(summary, vibe)
+    resp = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=4000,
     )
-    text = response.message.content
+    text = resp.choices[0].message.content
     json_match = re.search(r'\{[\s\S]*\}', text)
     if json_match:
         return json.loads(json_match.group())
     return {"shorts": [], "raw": text}
+
+
+def generate_shorts_plan_anthropic(all_analyses, trip_context, video_metas, vibe="cinematic"):
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    summary = json.dumps({
+        "trip_context": trip_context,
+        "videos_analyzed": len(all_analyses),
+        "all_clips": [
+            {**clip, "source_video": Path(a.get("video", "")).name}
+            for a in all_analyses
+            for clip in a.get("suggested_clips", [])
+        ]
+    }, indent=2)
+    prompt = _build_plan_prompt(summary, vibe)
+    resp = client.messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    text = resp.content[0].text
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        return json.loads(json_match.group())
+    return {"shorts": [], "raw": text}
+
 
 def enforce_duration(segments, fmt):
     """Trim segments so total duration fits within the platform's limit."""
@@ -585,8 +717,14 @@ def serve_static(filename):
 @app.route("/api/status")
 def status():
     if AI_PROVIDER == "ollama":
-        key_set = True  # Ollama doesn't need an API key
+        key_set = True
         model_label = OLLAMA_MODEL
+    elif AI_PROVIDER == "openai":
+        key_set = bool(OPENAI_API_KEY)
+        model_label = f"GPT · {OPENAI_MODEL}"
+    elif AI_PROVIDER == "anthropic":
+        key_set = bool(ANTHROPIC_API_KEY)
+        model_label = f"Claude · {ANTHROPIC_MODEL}"
     else:
         key_set = bool(GEMINI_API_KEY)
         model_label = "Gemini"
@@ -627,6 +765,7 @@ def analyze():
         data = request.json
         videos = data.get("videos", [])
         trip_context = data.get("trip_context", "")
+        vibe = data.get("vibe", "cinematic")
 
         if AI_PROVIDER == "gemini" and not GEMINI_API_KEY:
             return jsonify({"error": "Gemini API key not set"}), 400
@@ -652,6 +791,10 @@ def analyze():
                 try:
                     if AI_PROVIDER == "ollama":
                         analysis = analyze_video_with_ollama(video_path, trip_context, frames)
+                    elif AI_PROVIDER == "openai":
+                        analysis = analyze_video_with_openai(video_path, trip_context, frames)
+                    elif AI_PROVIDER == "anthropic":
+                        analysis = analyze_video_with_anthropic(video_path, trip_context, frames)
                     else:
                         analysis = analyze_video_with_gemini(video_path, trip_context, frames)
                         time.sleep(5)  # avoid free-tier rate limits between videos
@@ -666,9 +809,13 @@ def analyze():
 
         log("Generating overall content plan...")
         if AI_PROVIDER == "ollama":
-            plan = generate_shorts_plan_ollama(all_analyses, trip_context, video_metas)
+            plan = generate_shorts_plan_ollama(all_analyses, trip_context, video_metas, vibe=vibe)
+        elif AI_PROVIDER == "openai":
+            plan = generate_shorts_plan_openai(all_analyses, trip_context, video_metas, vibe=vibe)
+        elif AI_PROVIDER == "anthropic":
+            plan = generate_shorts_plan_anthropic(all_analyses, trip_context, video_metas, vibe=vibe)
         else:
-            plan = generate_shorts_plan(all_analyses, trip_context, video_metas)
+            plan = generate_shorts_plan(all_analyses, trip_context, video_metas, vibe=vibe)
 
         # Resolve source_video filenames to full paths in each segment
         def _resolve_path(sv):
@@ -837,6 +984,10 @@ def get_settings():
         "ollama_host":      OLLAMA_HOST,
         "gemini_key_set":   bool(GEMINI_API_KEY),
         "minnal_key_set":   bool(MINNAL_API_KEY),
+        "openai_key_set":   bool(OPENAI_API_KEY),
+        "openai_model":     OPENAI_MODEL,
+        "anthropic_key_set": bool(ANTHROPIC_API_KEY),
+        "anthropic_model":  ANTHROPIC_MODEL,
         "output_format":    OUTPUT_FORMAT,
         "smart_crop":       SMART_CROP,
         "filter_brightness": FILTER_BRIGHTNESS,
@@ -848,6 +999,7 @@ def get_settings():
 @app.route("/api/settings", methods=["POST"])
 def save_settings():
     global GEMINI_API_KEY, AI_PROVIDER, OLLAMA_MODEL, OLLAMA_HOST, MINNAL_API_KEY
+    global OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
     global OUTPUT_FORMAT, SMART_CROP, FILTER_BRIGHTNESS, FILTER_CONTRAST, FILTER_SATURATION, FILTER_SHARPNESS
     data = request.json or {}
 
@@ -871,6 +1023,18 @@ def save_settings():
     if "minnal_api_key" in data:
         MINNAL_API_KEY = data["minnal_api_key"]
         _set("MINNAL_API_KEY", MINNAL_API_KEY)
+    if "openai_api_key" in data and data["openai_api_key"]:
+        OPENAI_API_KEY = data["openai_api_key"]
+        _set("OPENAI_API_KEY", OPENAI_API_KEY)
+    if "openai_model" in data:
+        OPENAI_MODEL = data["openai_model"]
+        _set("OPENAI_MODEL", OPENAI_MODEL)
+    if "anthropic_api_key" in data and data["anthropic_api_key"]:
+        ANTHROPIC_API_KEY = data["anthropic_api_key"]
+        _set("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)
+    if "anthropic_model" in data:
+        ANTHROPIC_MODEL = data["anthropic_model"]
+        _set("ANTHROPIC_MODEL", ANTHROPIC_MODEL)
     if "output_format" in data:
         OUTPUT_FORMAT = data["output_format"]
         _set("OUTPUT_FORMAT", OUTPUT_FORMAT)
@@ -936,14 +1100,30 @@ def test_ollama():
 # ── Minnal integration ───────────────────────────────────────────────────────
 
 def minnal_request(method, path, body=None, api_key=None):
+    import urllib.error
     key = api_key or MINNAL_API_KEY
     url = f"{MINNAL_BASE}{path}"
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # Read and surface the actual error body from Minnal
+        try:
+            err_body = json.loads(e.read().decode())
+            # Minnal uses Claude under the hood — content filtering errors bubble up
+            msg = (err_body.get("error", {}).get("message")
+                   or err_body.get("message")
+                   or str(err_body))
+            if "content filtering" in msg.lower() or "blocked" in msg.lower():
+                msg = ("Minnal's AI blocked this content (content filtering). "
+                       "Try simplifying the caption or removing flagged words.")
+        except Exception:
+            msg = f"HTTP {e.code}: {e.reason}"
+        raise RuntimeError(msg) from None
 
 @app.route("/api/minnal/brands")
 def minnal_brands():
