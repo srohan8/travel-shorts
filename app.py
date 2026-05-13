@@ -14,10 +14,20 @@ from flask import Flask, request, jsonify, send_from_directory, render_template
 from dotenv import load_dotenv
 from dotenv import set_key as dotenv_set_key
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from PIL import Image
 import tempfile
 import ollama as ollama_client
 import urllib.request
+
+# Disable Gemini safety filters — travel content (action, adventure, risky activities)
+# routinely triggers the defaults and produces 400 "Output blocked" errors.
+_GEMINI_SAFETY = {
+    HarmCategory.HARM_CATEGORY_HARASSMENT:        HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH:       HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+}
 
 # ── Paths (works both in dev and when frozen by PyInstaller) ─────────────────
 if getattr(sys, 'frozen', False):
@@ -148,7 +158,7 @@ def extract_frames(video_path, num_frames=None):
 def analyze_video_with_gemini(video_path, trip_context, frames):
     """Send frames to Gemini for analysis"""
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel("gemini-2.0-flash-lite", safety_settings=_GEMINI_SAFETY)
     
     parts = []
     parts.append(f"""You are a travel content analyst. Analyze these frames from a travel video.
@@ -225,7 +235,7 @@ Respond in this exact JSON format:
 def generate_shorts_plan(all_analyses, trip_context, video_metas):
     """Generate overall YouTube Shorts content plan"""
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    model = genai.GenerativeModel("gemini-2.0-flash-lite", safety_settings=_GEMINI_SAFETY)
 
     summary = json.dumps({
         "trip_context": trip_context,
@@ -560,6 +570,11 @@ def cut_and_concat(segments, output_name):
 def index():
     base = str(_BUNDLE) if getattr(sys, 'frozen', False) else "."
     return send_from_directory(base, "index.html")
+
+@app.route("/<path:filename>")
+def serve_static(filename):
+    base = str(_BUNDLE) if getattr(sys, 'frozen', False) else "."
+    return send_from_directory(base, filename)
 
 @app.route("/api/status")
 def status():

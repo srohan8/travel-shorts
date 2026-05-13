@@ -1,1032 +1,1679 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Travel Shorts AI</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0a0f;
-    --surface: #111118;
-    --surface2: #1a1a24;
-    --border: #2a2a3a;
-    --accent: #e8c547;
-    --accent2: #ff6b35;
-    --text: #e8e8f0;
-    --muted: #666680;
-    --success: #4ade80;
-    --error: #f87171;
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-weight: 300;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* Grain overlay */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.4;
-  }
-
-  header {
-    padding: 40px 60px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: flex-end;
-    gap: 20px;
-  }
-
-  .logo {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 52px;
-    letter-spacing: 3px;
-    line-height: 1;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-
-  .tagline {
-    color: var(--muted);
-    font-size: 13px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    padding-bottom: 6px;
-  }
-
-  .main {
-    display: grid;
-    grid-template-columns: 340px 1fr;
-    min-height: calc(100vh - 100px);
-  }
-
-  /* LEFT PANEL */
-  .panel-left {
-    border-right: 1px solid var(--border);
-    padding: 32px 28px;
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-  }
-
-  .section-label {
-    font-family: 'DM Mono', monospace;
-    font-size: 10px;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 12px;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  label {
-    font-size: 12px;
-    color: var(--muted);
-    letter-spacing: 0.5px;
-  }
-
-  input:not([type=checkbox]), textarea {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    padding: 10px 14px;
-    outline: none;
-    transition: border-color 0.2s;
-    width: 100%;
-  }
-
-  input:focus, textarea:focus {
-    border-color: var(--accent);
-  }
-
-  input::placeholder, textarea::placeholder { color: var(--muted); }
-
-  textarea { resize: vertical; min-height: 80px; }
-
-  .btn {
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
-    padding: 11px 20px;
-    transition: all 0.2s;
-    width: 100%;
-  }
-
-  .btn-primary {
-    background: var(--accent);
-    color: #0a0a0f;
-  }
-  .btn-primary:hover { background: #f0d060; transform: translateY(-1px); }
-
-  .btn-secondary {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-
-  .btn-danger {
-    background: var(--accent2);
-    color: white;
-  }
-  .btn-danger:hover { background: #ff8555; }
-
-  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  .api-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-  }
-  .dot.ok { background: var(--success); }
-
-  /* Video list */
-  .video-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 300px;
-    overflow-y: auto;
-  }
-
-  .video-item {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    cursor: pointer;
-    transition: border-color 0.15s;
-    user-select: none;
-  }
-
-  .video-item:hover { border-color: var(--accent); }
-  .video-item.selected { border-color: var(--accent); background: #1f1f10; }
-
-  .video-item input[type=checkbox] { accent-color: var(--accent); }
-
-  .video-info { flex: 1; min-width: 0; }
-  .video-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .video-meta { font-size: 10px; color: var(--muted); margin-top: 2px; }
-
-  /* RIGHT PANEL */
-  .panel-right {
-    padding: 32px 40px;
-    overflow-y: auto;
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 400px;
-    gap: 16px;
-    color: var(--muted);
-  }
-
-  .empty-icon {
-    font-size: 64px;
-    opacity: 0.3;
-  }
-
-  .empty-state h2 {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 28px;
-    letter-spacing: 2px;
-    color: var(--border);
-  }
-
-  /* Progress */
-  .progress-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 20px;
-    font-family: 'DM Mono', monospace;
-    font-size: 12px;
-    color: var(--muted);
-    height: 200px;
-    overflow-y: auto;
-    display: none;
-  }
-
-  .progress-box.active { display: block; }
-  .progress-line { margin-bottom: 4px; }
-  .progress-line::before { content: '> '; color: var(--accent); }
-
-  /* Plan output */
-  .plan-header {
-    margin-bottom: 32px;
-  }
-
-  .series-title {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 42px;
-    letter-spacing: 2px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    line-height: 1;
-    margin-bottom: 8px;
-  }
-
-  .narrative {
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.6;
-    max-width: 600px;
-    margin-bottom: 8px;
-  }
-
-  .schedule-badge {
-    display: inline-block;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 4px 14px;
-    font-size: 11px;
-    color: var(--accent);
-    font-family: 'DM Mono', monospace;
-    letter-spacing: 1px;
-  }
-
-  .shorts-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    margin-top: 24px;
-  }
-
-  .short-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    transition: border-color 0.2s;
-  }
-
-  .short-card:hover { border-color: var(--accent); }
-
-  .short-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .short-number {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 36px;
-    color: var(--accent);
-    line-height: 1;
-    min-width: 40px;
-  }
-
-  .short-title-block { flex: 1; min-width: 0; }
-  .short-title { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
-  .segments-list { display: flex; flex-wrap: wrap; gap: 5px; }
-  .seg-badge {
-    font-size: 10px;
-    font-family: 'DM Mono', monospace;
-    color: var(--accent2);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 7px;
-    white-space: nowrap;
-  }
-
-  /* Output tab — format & preset pills */
-  .format-row, .preset-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-  .fmt-pill, .preset-pill {
-    flex:1; min-width:60px; padding:8px 6px; border-radius:8px; font-size:12px;
-    text-align:center; background:var(--surface2); border:1px solid var(--border);
-    color:var(--muted); cursor:pointer; line-height:1.5; transition:border-color .15s,color .15s;
-  }
-  .fmt-pill.active, .preset-pill.active {
-    border-color:var(--accent); color:var(--accent); background:#1a1a0a;
-  }
-  .fmt-pill:hover, .preset-pill:hover { border-color:var(--accent); color:var(--text); }
-  .slider-grid {
-    display:grid; grid-template-columns:80px 1fr 32px;
-    gap:7px 10px; align-items:center; font-size:12px;
-  }
-  .slider-grid input[type=range] { width:100%; accent-color:var(--accent); }
-  .slider-grid span { font-family:'DM Mono',monospace; font-size:11px; color:var(--muted); text-align:right; }
-  .settings-group-label {
-    font-size:10px; color:var(--muted); letter-spacing:.8px;
-    text-transform:uppercase; margin:14px 0 4px;
-  }
-
-  .short-body {
-    padding: 20px 24px;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-
-  .short-field label {
-    font-size: 10px;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--muted);
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  .short-field p {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text);
-  }
-
-  .hook-text {
-    font-style: italic;
-    color: var(--accent) !important;
-    font-size: 14px !important;
-  }
-
-  .hashtags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 4px;
-  }
-
-  .tag {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 11px;
-    color: var(--muted);
-    font-family: 'DM Mono', monospace;
-  }
-
-  .short-actions {
-    padding: 16px 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 10px;
-  }
-
-  .short-actions .btn { width: auto; }
-
-  .cut-status {
-    font-size: 12px;
-    color: var(--success);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .cut-all-bar {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-    padding: 16px 20px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    align-items: center;
-  }
-
-  .cut-all-bar p { flex: 1; font-size: 13px; color: var(--muted); }
-
-  /* Minnal schedule drawer */
-  .schedule-drawer {
-    border-top: 1px solid var(--border);
-    padding: 16px 20px;
-    display: none;
-    flex-direction: column;
-    gap: 10px;
-    background: #0d0d16;
-  }
-  .schedule-drawer.open { display: flex; }
-  .schedule-drawer label { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
-  .schedule-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .schedule-drawer select, .schedule-drawer input[type=datetime-local] {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text); font-family: 'DM Sans', sans-serif;
-    font-size: 12px; padding: 8px 10px; width: 100%; outline: none;
-  }
-  .btn-minnal {
-    background: #5865f2; color: white; border: none; border-radius: 6px;
-    cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 12px;
-    font-weight: 500; padding: 8px 14px; transition: background 0.2s;
-  }
-  .btn-minnal:hover { background: #6c79f5; }
-  .btn-minnal:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .spinner {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    vertical-align: middle;
-    margin-right: 6px;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .badge-ok { color: var(--success); font-size: 11px; }
-  .badge-err { color: var(--error); font-size: 11px; }
-
-  .ffmpeg-box {
-    background: #050508;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
-    color: #7a7a9a;
-    word-break: break-all;
-    margin-top: 8px;
-  }
-
-  /* Output step — button + inline popover */
-  .output-btn {
-    width: 100%; padding: 10px 14px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
-    color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px;
-    cursor: pointer; display: flex; align-items: center; gap: 7px;
-    transition: border-color 0.2s; text-align: left;
-  }
-  .output-btn:hover { border-color: var(--accent); }
-  .output-btn .chevron { margin-left: auto; color: var(--muted); font-size: 10px; transition: transform 0.15s; }
-  .output-btn.open .chevron { transform: rotate(180deg); }
-  .output-popover {
-    position: absolute; left: 0; right: 0; top: calc(100% + 6px);
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 18px; z-index: 200; box-shadow: 0 12px 40px rgba(0,0,0,0.65);
-    display: none;
-  }
-  .output-popover.open { display: block; }
-
-  /* Settings modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    z-index: 1000; display: none; align-items: center; justify-content: center;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; width: 480px; max-width: 95vw;
-    padding: 28px; display: flex; flex-direction: column; gap: 20px;
-  }
-  .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; color: var(--accent); }
-  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
-  .tab {
-    background: none; border: none; border-bottom: 2px solid transparent;
-    color: var(--muted); cursor: pointer; font-family: 'DM Sans', sans-serif;
-    font-size: 13px; padding: 8px 16px; margin-bottom: -1px; transition: all 0.15s;
-  }
-  .tab.active { border-bottom-color: var(--accent); color: var(--accent); }
-  .tab-panel { display: none; flex-direction: column; gap: 14px; }
-  .tab-panel.active { display: flex; }
-  .hint { font-size: 11px; color: var(--muted); line-height: 1.5; }
-  .hint code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-family: 'DM Mono', monospace; }
-  .modal-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
-  .modal-actions .btn { flex: 1; }
-  #settingsSaveStatus { font-size: 12px; color: var(--muted); }
-</style>
-</head>
-<body>
-
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsOverlay" onclick="if(event.target===this)closeSettings()">
-  <div class="modal">
-    <div class="modal-title">⚙️ Settings</div>
-    <div class="tabs">
-      <button class="tab active" onclick="switchTab('gemini')">Gemini</button>
-      <button class="tab" onclick="switchTab('ollama')">Ollama</button>
-      <button class="tab" onclick="switchTab('minnal')">Minnal</button>
-    </div>
-
-    <!-- Gemini tab -->
-    <div class="tab-panel active" id="tab-gemini">
-      <div class="field">
-        <label>API Key</label>
-        <input type="password" id="s-gemini-key" placeholder="AIza..." />
-      </div>
-      <p class="hint">Get a free key at <span style="color:var(--accent)">aistudio.google.com/app/apikey</span> — no credit card needed.</p>
-    </div>
-
-    <!-- Ollama tab -->
-    <div class="tab-panel" id="tab-ollama">
-      <div class="field">
-        <label>Ollama Host</label>
-        <input type="text" id="s-ollama-host" placeholder="http://localhost:11434" />
-      </div>
-      <div class="field">
-        <label>Model</label>
-        <input type="text" id="s-ollama-model" placeholder="gemma4:31b-cloud" />
-      </div>
-      <div style="margin:8px 0;">
-        <button class="btn btn-secondary" onclick="testOllamaConnection()" id="ollamaTestBtn">Test Connection</button>
-        <span id="ollamaTestStatus" style="margin-left:10px;font-size:13px;"></span>
-      </div>
-      <p class="hint">
-        Install Ollama from <span style="color:var(--accent)">ollama.com</span>, then pull the model:<br>
-        <code>ollama pull gemma4:31b-cloud</code>
-      </p>
-    </div>
-
-    <!-- Minnal tab -->
-    <div class="tab-panel" id="tab-minnal">
-      <div class="field">
-        <label>Minnal API Key</label>
-        <input type="password" id="s-minnal-key" placeholder="sk_..." />
-      </div>
-      <p class="hint">Get your key at <span style="color:var(--accent)">app.minnal.io</span> → Settings → API Keys.</p>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
-      <span id="settingsSaveStatus"></span>
-    </div>
-  </div>
-</div>
-
-<header>
-  <div class="logo">TRAVEL SHORTS AI</div>
-  <div class="tagline">Turn your footage into stories</div>
-  <button onclick="openSettings()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px;transition:all 0.2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">⚙️ Settings</button>
-</header>
-
-<div class="main">
-
-  <!-- LEFT PANEL -->
-  <div class="panel-left">
-
-    <div>
-      <div class="section-label" id="aiProviderLabel">01 — AI</div>
-      <div class="api-status">
-        <div class="dot" id="keyDot"></div>
-        <span id="keyStatus">not set</span>
-      </div>
-      <p style="font-size:11px; color:var(--muted); margin-top:6px;" id="aiProviderHint"></p>
-      <p style="font-size:11px; color:var(--accent); margin-top:4px; cursor:pointer;" onclick="openSettings()">Open Settings to configure →</p>
-    </div>
-
-    <div>
-      <div class="section-label">02 — Video Folder</div>
-      <div class="field">
-        <label>Folder path (absolute)</label>
-        <input type="text" id="folderPath" placeholder="C:\Videos\Bali2026 or /home/user/videos" />
-      </div>
-      <button class="btn btn-secondary" style="margin-top:10px" id="scanBtn" onclick="scanFolder()">Scan Folder</button>
-      <p id="scanStatus" style="font-size:11px; color:var(--muted); margin-top:8px; display:none;"></p>
-    </div>
-
-    <div id="videoSection" style="display:none">
-      <div class="section-label">03 — Select Videos</div>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <span style="font-size:12px; color:var(--muted)" id="videoCount"></span>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:11px" onclick="selectAll()">All</button>
-          <button class="btn btn-secondary" style="width:auto; padding:4px 10px; font-size:11px" onclick="selectNone()">None</button>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Travel Shorts AI</title>
+        <link rel="icon" type="image/png" href="/fav-icon.png" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=DM+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #0a0a0f;
+                --surface: #111118;
+                --surface2: #1a1a24;
+                --border: #2a2a3a;
+                --accent: #e8c547;
+                --accent2: #ff6b35;
+                --text: #e8e8f0;
+                --muted: #666680;
+                --success: #4ade80;
+                --error: #f87171;
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: "DM Sans", sans-serif;
+                font-weight: 300;
+                min-height: 100vh;
+                overflow-x: hidden;
+            }
+
+            /* Grain overlay */
+            body::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+                pointer-events: none;
+                z-index: 9999;
+                opacity: 0.4;
+            }
+
+            header {
+                padding: 40px 20px 20px;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: flex-end;
+                gap: 20px;
+            }
+
+            .logo {
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 52px;
+                letter-spacing: 3px;
+                line-height: 1;
+                background: linear-gradient(
+                    135deg,
+                    var(--accent) 0%,
+                    var(--accent2) 100%
+                );
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+
+            .tagline {
+                color: var(--muted);
+                font-size: 13px;
+                letter-spacing: 2px;
+                text-transform: none;
+                padding-bottom: 6px;
+                margin-left: 7px;
+            }
+
+            .main {
+                display: grid;
+                grid-template-columns: 340px 1fr;
+                min-height: calc(100vh - 100px);
+            }
+
+            /* LEFT PANEL */
+            .panel-left {
+                border-right: 1px solid var(--border);
+                padding: 32px 28px;
+                display: flex;
+                flex-direction: column;
+                gap: 28px;
+            }
+
+            .section-label {
+                font-family: "DM Mono", monospace;
+                font-size: 10px;
+                letter-spacing: 3px;
+                text-transform: uppercase;
+                color: var(--accent);
+                margin-bottom: 12px;
+            }
+
+            .field {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            label {
+                font-size: 12px;
+                color: var(--muted);
+                letter-spacing: 0.5px;
+            }
+
+            input:not([type="checkbox"]),
+            textarea {
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-family: "DM Sans", sans-serif;
+                font-size: 14px;
+                padding: 10px 14px;
+                outline: none;
+                transition: border-color 0.2s;
+                width: 100%;
+            }
+
+            input:focus,
+            textarea:focus {
+                border-color: var(--accent);
+            }
+
+            input::placeholder,
+            textarea::placeholder {
+                color: var(--muted);
+            }
+
+            textarea {
+                resize: vertical;
+                min-height: 80px;
+            }
+
+            .btn {
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-family: "DM Sans", sans-serif;
+                font-size: 13px;
+                font-weight: 500;
+                letter-spacing: 0.5px;
+                padding: 11px 20px;
+                transition: all 0.2s;
+                width: 100%;
+            }
+
+            .btn-primary {
+                background: var(--accent);
+                color: #0a0a0f;
+            }
+            .btn-primary:hover {
+                background: #f0d060;
+                transform: translateY(-1px);
+            }
+
+            .btn-secondary {
+                background: transparent;
+                border: 1px solid var(--border);
+                color: var(--text);
+            }
+            .btn-secondary:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+
+            .btn-danger {
+                background: var(--accent2);
+                color: white;
+            }
+            .btn-danger:hover {
+                background: #ff8555;
+            }
+
+            .btn:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+            .api-status {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-size: 12px;
+                color: var(--muted);
+            }
+
+            .dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--muted);
+            }
+            .dot.ok {
+                background: var(--success);
+            }
+
+            /* Video list */
+            .video-list {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+
+            .video-item {
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 10px 12px;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                cursor: pointer;
+                transition: border-color 0.15s;
+                user-select: none;
+            }
+
+            .video-item:hover {
+                border-color: var(--accent);
+            }
+            .video-item.selected {
+                border-color: var(--accent);
+                background: #1f1f10;
+            }
+
+            .video-item input[type="checkbox"] {
+                accent-color: var(--accent);
+            }
+
+            .video-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .video-name {
+                font-size: 12px;
+                font-weight: 500;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .video-meta {
+                font-size: 10px;
+                color: var(--muted);
+                margin-top: 2px;
+            }
+
+            /* RIGHT PANEL */
+            .panel-right {
+                padding: 32px 40px;
+                overflow-y: auto;
+            }
+
+            .empty-state {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 400px;
+                gap: 16px;
+                color: var(--muted);
+            }
+
+            .empty-icon {
+                font-size: 64px;
+                opacity: 0.3;
+            }
+
+            .empty-state h2 {
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 28px;
+                letter-spacing: 2px;
+                color: var(--border);
+            }
+
+            /* Progress */
+            .progress-box {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 20px;
+                font-family: "DM Mono", monospace;
+                font-size: 12px;
+                color: var(--muted);
+                height: 200px;
+                overflow-y: auto;
+                display: none;
+            }
+
+            .progress-box.active {
+                display: block;
+            }
+            .progress-line {
+                margin-bottom: 4px;
+            }
+            .progress-line::before {
+                content: "> ";
+                color: var(--accent);
+            }
+
+            /* Plan output */
+            .plan-header {
+                margin-bottom: 32px;
+            }
+
+            .series-title {
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 42px;
+                letter-spacing: 2px;
+                background: linear-gradient(
+                    135deg,
+                    var(--accent),
+                    var(--accent2)
+                );
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                line-height: 1;
+                margin-bottom: 8px;
+            }
+
+            .narrative {
+                color: var(--muted);
+                font-size: 14px;
+                line-height: 1.6;
+                max-width: 600px;
+                margin-bottom: 8px;
+            }
+
+            .schedule-badge {
+                display: inline-block;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 20px;
+                padding: 4px 14px;
+                font-size: 11px;
+                color: var(--accent);
+                font-family: "DM Mono", monospace;
+                letter-spacing: 1px;
+            }
+
+            .shorts-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+                margin-top: 24px;
+            }
+
+            .short-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                overflow: hidden;
+                transition: border-color 0.2s;
+            }
+
+            .short-card:hover {
+                border-color: var(--accent);
+            }
+
+            .short-header {
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 20px 24px;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .short-number {
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 36px;
+                color: var(--accent);
+                line-height: 1;
+                min-width: 40px;
+            }
+
+            .short-title-block {
+                flex: 1;
+                min-width: 0;
+            }
+            .short-title {
+                font-size: 16px;
+                font-weight: 500;
+                margin-bottom: 6px;
+            }
+            .segments-list {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+            .seg-badge {
+                font-size: 10px;
+                font-family: "DM Mono", monospace;
+                color: var(--accent2);
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 2px 7px;
+                white-space: nowrap;
+            }
+
+            /* Output tab — format & preset pills */
+            .format-row,
+            .preset-row {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                margin-top: 6px;
+            }
+            .fmt-pill,
+            .preset-pill {
+                flex: 1;
+                min-width: 60px;
+                padding: 8px 6px;
+                border-radius: 8px;
+                font-size: 12px;
+                text-align: center;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                color: var(--muted);
+                cursor: pointer;
+                line-height: 1.5;
+                transition:
+                    border-color 0.15s,
+                    color 0.15s;
+            }
+            .fmt-pill.active,
+            .preset-pill.active {
+                border-color: var(--accent);
+                color: var(--accent);
+                background: #1a1a0a;
+            }
+            .fmt-pill:hover,
+            .preset-pill:hover {
+                border-color: var(--accent);
+                color: var(--text);
+            }
+            .slider-grid {
+                display: grid;
+                grid-template-columns: 80px 1fr 32px;
+                gap: 7px 10px;
+                align-items: center;
+                font-size: 12px;
+            }
+            .slider-grid input[type="range"] {
+                width: 100%;
+                accent-color: var(--accent);
+            }
+            .slider-grid span {
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                color: var(--muted);
+                text-align: right;
+            }
+            .settings-group-label {
+                font-size: 10px;
+                color: var(--muted);
+                letter-spacing: 0.8px;
+                text-transform: uppercase;
+                margin: 14px 0 4px;
+            }
+
+            .short-body {
+                padding: 20px 24px;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+            }
+
+            .short-field label {
+                font-size: 10px;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                color: var(--muted);
+                display: block;
+                margin-bottom: 6px;
+            }
+
+            .short-field p {
+                font-size: 13px;
+                line-height: 1.5;
+                color: var(--text);
+            }
+
+            .hook-text {
+                font-style: italic;
+                color: var(--accent) !important;
+                font-size: 14px !important;
+            }
+
+            .hashtags {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-top: 4px;
+            }
+
+            .tag {
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 2px 8px;
+                font-size: 11px;
+                color: var(--muted);
+                font-family: "DM Mono", monospace;
+            }
+
+            .short-actions {
+                padding: 16px 24px;
+                border-top: 1px solid var(--border);
+                display: flex;
+                gap: 10px;
+            }
+
+            .short-actions .btn {
+                width: auto;
+            }
+
+            .cut-status {
+                font-size: 12px;
+                color: var(--success);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .cut-all-bar {
+                display: flex;
+                gap: 12px;
+                margin-bottom: 24px;
+                padding: 16px 20px;
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                align-items: center;
+            }
+
+            .cut-all-bar p {
+                flex: 1;
+                font-size: 13px;
+                color: var(--muted);
+            }
+
+            /* Minnal schedule drawer */
+            .schedule-drawer {
+                border-top: 1px solid var(--border);
+                padding: 16px 20px;
+                display: none;
+                flex-direction: column;
+                gap: 10px;
+                background: #0d0d16;
+            }
+            .schedule-drawer.open {
+                display: flex;
+            }
+            .schedule-drawer label {
+                font-size: 11px;
+                color: var(--muted);
+                margin-bottom: 2px;
+            }
+            .schedule-row {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+            .schedule-drawer select,
+            .schedule-drawer input[type="datetime-local"] {
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-family: "DM Sans", sans-serif;
+                font-size: 12px;
+                padding: 8px 10px;
+                width: 100%;
+                outline: none;
+            }
+            .btn-minnal {
+                background: #5865f2;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                font-family: "DM Sans", sans-serif;
+                font-size: 12px;
+                font-weight: 500;
+                padding: 8px 14px;
+                transition: background 0.2s;
+            }
+            .btn-minnal:hover {
+                background: #6c79f5;
+            }
+            .btn-minnal:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+
+            /* Scrollbar */
+            ::-webkit-scrollbar {
+                width: 4px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--border);
+                border-radius: 2px;
+            }
+
+            .spinner {
+                display: inline-block;
+                width: 14px;
+                height: 14px;
+                border: 2px solid var(--border);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                vertical-align: middle;
+                margin-right: 6px;
+            }
+
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .badge-ok {
+                color: var(--success);
+                font-size: 11px;
+            }
+            .badge-err {
+                color: var(--error);
+                font-size: 11px;
+            }
+
+            .ffmpeg-box {
+                background: #050508;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 10px 14px;
+                font-family: "DM Mono", monospace;
+                font-size: 11px;
+                color: #7a7a9a;
+                word-break: break-all;
+                margin-top: 8px;
+            }
+
+            /* Output step — button + inline popover */
+            .output-btn {
+                width: 100%;
+                padding: 10px 14px;
+                background: var(--surface2);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                color: var(--text);
+                font-family: "DM Sans", sans-serif;
+                font-size: 13px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                transition: border-color 0.2s;
+                text-align: left;
+            }
+            .output-btn:hover {
+                border-color: var(--accent);
+            }
+            .output-btn .chevron {
+                margin-left: auto;
+                color: var(--muted);
+                font-size: 10px;
+                transition: transform 0.15s;
+            }
+            .output-btn.open .chevron {
+                transform: rotate(180deg);
+            }
+            .output-popover {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: calc(100% + 6px);
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 18px;
+                z-index: 200;
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+                display: none;
+            }
+            .output-popover.open {
+                display: block;
+            }
+
+            /* Settings modal */
+            .modal-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.7);
+                z-index: 1000;
+                display: none;
+                align-items: center;
+                justify-content: center;
+            }
+            .modal-overlay.open {
+                display: flex;
+            }
+            .modal {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                width: 480px;
+                max-width: 95vw;
+                padding: 28px;
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .modal-title {
+                font-family: "Bebas Neue", sans-serif;
+                font-size: 24px;
+                letter-spacing: 2px;
+                color: var(--accent);
+            }
+            .tabs {
+                display: flex;
+                gap: 4px;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: 0;
+            }
+            .tab {
+                background: none;
+                border: none;
+                border-bottom: 2px solid transparent;
+                color: var(--muted);
+                cursor: pointer;
+                font-family: "DM Sans", sans-serif;
+                font-size: 13px;
+                padding: 8px 16px;
+                margin-bottom: -1px;
+                transition: all 0.15s;
+            }
+            .tab.active {
+                border-bottom-color: var(--accent);
+                color: var(--accent);
+            }
+            .tab-panel {
+                display: none;
+                flex-direction: column;
+                gap: 14px;
+            }
+            .tab-panel.active {
+                display: flex;
+            }
+            .hint {
+                font-size: 11px;
+                color: var(--muted);
+                line-height: 1.5;
+            }
+            .hint code {
+                background: var(--surface2);
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-family: "DM Mono", monospace;
+            }
+            .modal-actions {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                margin-top: 4px;
+            }
+            .modal-actions .btn {
+                flex: 1;
+            }
+            #settingsSaveStatus {
+                font-size: 12px;
+                color: var(--muted);
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Settings Modal -->
+        <div
+            class="modal-overlay"
+            id="settingsOverlay"
+            onclick="if (event.target === this) closeSettings();"
+        >
+            <div class="modal">
+                <div class="modal-title">⚙️ Settings</div>
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('gemini')">
+                        Gemini
+                    </button>
+                    <button class="tab" onclick="switchTab('ollama')">
+                        Ollama
+                    </button>
+                    <button class="tab" onclick="switchTab('minnal')">
+                        Minnal
+                    </button>
+                </div>
+
+                <!-- Gemini tab -->
+                <div class="tab-panel active" id="tab-gemini">
+                    <div class="field">
+                        <label>API Key</label>
+                        <input
+                            type="password"
+                            id="s-gemini-key"
+                            placeholder="AIza..."
+                        />
+                    </div>
+                    <p class="hint">
+                        Get a free key at
+                        <span style="color: var(--accent)"
+                            >aistudio.google.com/app/apikey</span
+                        >
+                        — no credit card needed.
+                    </p>
+                </div>
+
+                <!-- Ollama tab -->
+                <div class="tab-panel" id="tab-ollama">
+                    <div class="field">
+                        <label>Ollama Host</label>
+                        <input
+                            type="text"
+                            id="s-ollama-host"
+                            placeholder="http://localhost:11434"
+                        />
+                    </div>
+                    <div class="field">
+                        <label>Model</label>
+                        <input
+                            type="text"
+                            id="s-ollama-model"
+                            placeholder="gemma4:31b-cloud"
+                        />
+                    </div>
+                    <div style="margin: 8px 0">
+                        <button
+                            class="btn btn-secondary"
+                            onclick="testOllamaConnection()"
+                            id="ollamaTestBtn"
+                        >
+                            Test Connection
+                        </button>
+                        <span
+                            id="ollamaTestStatus"
+                            style="margin-left: 10px; font-size: 13px"
+                        ></span>
+                    </div>
+                    <p class="hint">
+                        Install Ollama from
+                        <span style="color: var(--accent)">ollama.com</span>,
+                        then pull the model:<br />
+                        <code>ollama pull gemma4:31b-cloud</code>
+                    </p>
+                </div>
+
+                <!-- Minnal tab -->
+                <div class="tab-panel" id="tab-minnal">
+                    <div class="field">
+                        <label>Minnal API Key</label>
+                        <input
+                            type="password"
+                            id="s-minnal-key"
+                            placeholder="sk_..."
+                        />
+                    </div>
+                    <p class="hint">
+                        Get your key at
+                        <span style="color: var(--accent)">app.minnal.io</span>
+                        → Settings → API Keys.
+                    </p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeSettings()">
+                        Cancel
+                    </button>
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        Save
+                    </button>
+                    <span id="settingsSaveStatus"></span>
+                </div>
+            </div>
         </div>
-      </div>
-      <div class="video-list" id="videoList"></div>
-    </div>
 
-    <!-- Step 04 — Output settings (popover) -->
-    <div style="position:relative" id="outputStep">
-      <div class="section-label">04 — Output</div>
-      <button class="output-btn" id="outputToggleBtn" onclick="toggleOutputPopover()">
-        <span>📐</span>
-        <span id="opFormatLabel">YT Shorts</span>
-        <span style="color:var(--muted)">·</span>
-        <span id="opLookLabel">Natural</span>
-        <span id="opCropLabel" style="color:var(--muted);font-size:11px"> · Crop ✓</span>
-        <span class="chevron">▾</span>
-      </button>
+        <header>
+            <div
+                style="
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    align-items: flex-start;
+                "
+            >
+                <div class="logo">
+                    <img
+                        src="/logo.png"
+                        alt="Travel Shorts AI"
+                        style="height: 48px; width: auto; display: block"
+                    />
+                </div>
+                <div class="tagline">Turn your footage into stories</div>
+            </div>
+            <button
+                onclick="openSettings()"
+                style="
+                    margin-left: auto;
+                    background: none;
+                    border: 1px solid var(--border);
+                    border-radius: 6px;
+                    color: var(--muted);
+                    cursor: pointer;
+                    padding: 6px 12px;
+                    font-size: 13px;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    transition: all 0.2s;
+                "
+                onmouseover="
+                    this.style.borderColor = 'var(--accent)';
+                    this.style.color = 'var(--accent)';
+                "
+                onmouseout="
+                    this.style.borderColor = 'var(--border)';
+                    this.style.color = 'var(--muted)';
+                "
+            >
+                ⚙️ Settings
+            </button>
+        </header>
 
-      <div class="output-popover" id="outputPopover">
+        <div class="main">
+            <!-- LEFT PANEL -->
+            <div class="panel-left">
+                <div>
+                    <div class="section-label" id="aiProviderLabel">
+                        01 — AI
+                    </div>
+                    <div class="api-status">
+                        <div class="dot" id="keyDot"></div>
+                        <span id="keyStatus">not set</span>
+                    </div>
+                    <p
+                        style="
+                            font-size: 11px;
+                            color: var(--muted);
+                            margin-top: 6px;
+                        "
+                        id="aiProviderHint"
+                    ></p>
+                    <p
+                        style="
+                            font-size: 11px;
+                            color: var(--accent);
+                            margin-top: 4px;
+                            cursor: pointer;
+                        "
+                        onclick="openSettings()"
+                    >
+                        Open Settings to configure →
+                    </p>
+                </div>
 
-        <div class="settings-group-label">Format</div>
-        <div class="format-row">
-          <button class="fmt-pill active" data-fmt="shorts" onclick="setOutputFormat('shorts')">
-            YT Shorts<br><small style="color:var(--muted)">≤ 60s · 9:16</small>
-          </button>
-          <button class="fmt-pill" data-fmt="reels" onclick="setOutputFormat('reels')">
-            Reels<br><small style="color:var(--muted)">≤ 90s · 9:16</small>
-          </button>
-          <button class="fmt-pill" data-fmt="tiktok" onclick="setOutputFormat('tiktok')">
-            TikTok<br><small style="color:var(--muted)">≤ 10 min · 9:16</small>
-          </button>
+                <div>
+                    <div class="section-label">02 — Video Folder</div>
+                    <div class="field">
+                        <label>Folder path (absolute)</label>
+                        <input
+                            type="text"
+                            id="folderPath"
+                            placeholder="C:\Videos\Bali2026 or /home/user/videos"
+                        />
+                    </div>
+                    <button
+                        class="btn btn-secondary"
+                        style="margin-top: 10px"
+                        id="scanBtn"
+                        onclick="scanFolder()"
+                    >
+                        Scan Folder
+                    </button>
+                    <p
+                        id="scanStatus"
+                        style="
+                            font-size: 11px;
+                            color: var(--muted);
+                            margin-top: 8px;
+                            display: none;
+                        "
+                    ></p>
+                </div>
+
+                <div id="videoSection" style="display: none">
+                    <div class="section-label">03 — Select Videos</div>
+                    <div
+                        style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 10px;
+                        "
+                    >
+                        <span
+                            style="font-size: 12px; color: var(--muted)"
+                            id="videoCount"
+                        ></span>
+                        <div style="display: flex; gap: 8px">
+                            <button
+                                class="btn btn-secondary"
+                                style="
+                                    width: auto;
+                                    padding: 4px 10px;
+                                    font-size: 11px;
+                                "
+                                onclick="selectAll()"
+                            >
+                                All
+                            </button>
+                            <button
+                                class="btn btn-secondary"
+                                style="
+                                    width: auto;
+                                    padding: 4px 10px;
+                                    font-size: 11px;
+                                "
+                                onclick="selectNone()"
+                            >
+                                None
+                            </button>
+                        </div>
+                    </div>
+                    <div class="video-list" id="videoList"></div>
+                </div>
+
+                <!-- Step 04 — Output settings (popover) -->
+                <div style="position: relative" id="outputStep">
+                    <div class="section-label">04 — Output</div>
+                    <button
+                        class="output-btn"
+                        id="outputToggleBtn"
+                        onclick="toggleOutputPopover()"
+                    >
+                        <span>📐</span>
+                        <span id="opFormatLabel">YT Shorts</span>
+                        <span style="color: var(--muted)">·</span>
+                        <span id="opLookLabel">Natural</span>
+                        <span
+                            id="opCropLabel"
+                            style="color: var(--muted); font-size: 11px"
+                        >
+                            · Crop ✓</span
+                        >
+                        <span class="chevron">▾</span>
+                    </button>
+
+                    <div class="output-popover" id="outputPopover">
+                        <div class="settings-group-label">Format</div>
+                        <div class="format-row">
+                            <button
+                                class="fmt-pill active"
+                                data-fmt="shorts"
+                                onclick="setOutputFormat('shorts')"
+                            >
+                                YT Shorts<br /><small
+                                    style="color: var(--muted)"
+                                    >≤ 60s · 9:16</small
+                                >
+                            </button>
+                            <button
+                                class="fmt-pill"
+                                data-fmt="reels"
+                                onclick="setOutputFormat('reels')"
+                            >
+                                Reels<br /><small style="color: var(--muted)"
+                                    >≤ 90s · 9:16</small
+                                >
+                            </button>
+                            <button
+                                class="fmt-pill"
+                                data-fmt="tiktok"
+                                onclick="setOutputFormat('tiktok')"
+                            >
+                                TikTok<br /><small style="color: var(--muted)"
+                                    >≤ 10 min · 9:16</small
+                                >
+                            </button>
+                        </div>
+
+                        <label
+                            style="
+                                display: flex;
+                                align-items: center;
+                                gap: 8px;
+                                font-size: 13px;
+                                cursor: pointer;
+                                margin-top: 14px;
+                            "
+                        >
+                            <input
+                                type="checkbox"
+                                id="op-smart-crop"
+                                checked
+                                onchange="saveOutputSettings()"
+                            />
+                            Smart crop to 9:16 (face &amp; motion)
+                            <span
+                                id="opencvStatus"
+                                style="
+                                    font-size: 10px;
+                                    margin-left: auto;
+                                    font-family: &quot;DM Mono&quot;, monospace;
+                                "
+                            ></span>
+                        </label>
+
+                        <div
+                            class="settings-group-label"
+                            style="margin-top: 14px"
+                        >
+                            Look
+                        </div>
+                        <div class="preset-row">
+                            <button
+                                class="preset-pill active"
+                                data-preset="natural"
+                                onclick="setPreset('natural')"
+                            >
+                                Natural
+                            </button>
+                            <button
+                                class="preset-pill"
+                                data-preset="vivid"
+                                onclick="setPreset('vivid')"
+                            >
+                                Vivid
+                            </button>
+                            <button
+                                class="preset-pill"
+                                data-preset="cinematic"
+                                onclick="setPreset('cinematic')"
+                            >
+                                Cinematic
+                            </button>
+                            <button
+                                class="preset-pill"
+                                data-preset="warm"
+                                onclick="setPreset('warm')"
+                            >
+                                Warm
+                            </button>
+                            <button
+                                class="preset-pill"
+                                data-preset="cool"
+                                onclick="setPreset('cool')"
+                            >
+                                Cool
+                            </button>
+                            <button
+                                class="preset-pill"
+                                data-preset="bwhdr"
+                                onclick="setPreset('bwhdr')"
+                            >
+                                B&amp;W HDR
+                            </button>
+                        </div>
+
+                        <div
+                            class="settings-group-label"
+                            style="margin-top: 14px"
+                        >
+                            Fine-tune
+                        </div>
+                        <div class="slider-grid">
+                            <label>Brightness</label>
+                            <input
+                                type="range"
+                                id="op-brightness"
+                                min="-50"
+                                max="50"
+                                value="0"
+                                oninput="syncSlider('brightness', this.value)"
+                            />
+                            <span id="op-brightness-val">0</span>
+
+                            <label>Contrast</label>
+                            <input
+                                type="range"
+                                id="op-contrast"
+                                min="-50"
+                                max="50"
+                                value="0"
+                                oninput="syncSlider('contrast', this.value)"
+                            />
+                            <span id="op-contrast-val">0</span>
+
+                            <label>Saturation</label>
+                            <input
+                                type="range"
+                                id="op-saturation"
+                                min="-100"
+                                max="50"
+                                value="0"
+                                oninput="syncSlider('saturation', this.value)"
+                            />
+                            <span id="op-saturation-val">0</span>
+
+                            <label>Sharpness</label>
+                            <input
+                                type="range"
+                                id="op-sharpness"
+                                min="0"
+                                max="100"
+                                value="0"
+                                oninput="syncSlider('sharpness', this.value)"
+                            />
+                            <span id="op-sharpness-val">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="section-label">05 — Trip Context</div>
+                    <div class="field">
+                        <label>Tell the AI about your trip</label>
+                        <textarea
+                            id="tripContext"
+                            placeholder="e.g. Solo trip to Bali, Indonesia — March 2026. 10 days. Visited Ubud, Seminyak, Canggu. Lots of food, temples, rice fields, sunset sessions. Vibe: peaceful but adventurous."
+                        ></textarea>
+                    </div>
+                </div>
+
+                <button
+                    class="btn btn-primary"
+                    id="analyzeBtn"
+                    onclick="analyze()"
+                    disabled
+                >
+                    Analyze & Generate Plan
+                </button>
+                <div
+                    id="estimateHint"
+                    style="
+                        display: none;
+                        font-size: 12px;
+                        color: var(--muted);
+                        margin-top: 6px;
+                        font-family: &quot;DM Mono&quot;, monospace;
+                    "
+                ></div>
+                <button
+                    class="btn btn-secondary"
+                    id="stopBtn"
+                    onclick="stopAnalyze()"
+                    style="
+                        display: none;
+                        margin-top: 8px;
+                        border-color: var(--error);
+                        color: var(--error);
+                    "
+                >
+                    ⏹ Stop & Get Results So Far
+                </button>
+
+                <div id="minnalSection" style="display: none">
+                    <div class="section-label">06 — Schedule via Minnal</div>
+                    <div class="field">
+                        <label>Minnal API Key</label>
+                        <input
+                            type="password"
+                            id="minnalKey"
+                            placeholder="sk_..."
+                            oninput="onMinnalKeyInput(this.value)"
+                        />
+                    </div>
+                    <div class="field" style="margin-top: 10px">
+                        <label>Brand</label>
+                        <select
+                            id="minnalBrand"
+                            style="
+                                background: var(--surface2);
+                                border: 1px solid var(--border);
+                                border-radius: 6px;
+                                color: var(--text);
+                                font-family: &quot;DM Sans&quot;, sans-serif;
+                                font-size: 14px;
+                                padding: 10px 14px;
+                                width: 100%;
+                                outline: none;
+                            "
+                        >
+                            <option value="">— load brands —</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL -->
+            <div class="panel-right" id="rightPanel">
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">🎬</div>
+                    <h2>READY WHEN YOU ARE</h2>
+                    <p
+                        style="
+                            font-size: 13px;
+                            text-align: center;
+                            max-width: 300px;
+                        "
+                    >
+                        Set your API key, scan a folder, pick your videos, add
+                        trip context — then hit Analyze.
+                    </p>
+                </div>
+
+                <div
+                    id="analyzeCounter"
+                    style="
+                        display: none;
+                        font-family: &quot;DM Mono&quot;, monospace;
+                        font-size: 13px;
+                        color: var(--accent);
+                        font-weight: 500;
+                        margin-bottom: 8px;
+                    "
+                ></div>
+                <div class="progress-box" id="progressBox"></div>
+
+                <div id="planOutput" style="display: none"></div>
+            </div>
         </div>
 
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:14px">
-          <input type="checkbox" id="op-smart-crop" checked onchange="saveOutputSettings()">
-          Smart crop to 9:16 (face &amp; motion)
-          <span id="opencvStatus" style="font-size:10px;margin-left:auto;font-family:'DM Mono',monospace"></span>
-        </label>
+        <script>
+            let videos = [];
+            let selectedVideos = new Set();
+            let planData = null;
+            let progressInterval = null;
 
-        <div class="settings-group-label" style="margin-top:14px">Look</div>
-        <div class="preset-row">
-          <button class="preset-pill active" data-preset="natural"   onclick="setPreset('natural')">Natural</button>
-          <button class="preset-pill"        data-preset="vivid"     onclick="setPreset('vivid')">Vivid</button>
-          <button class="preset-pill"        data-preset="cinematic" onclick="setPreset('cinematic')">Cinematic</button>
-          <button class="preset-pill"        data-preset="warm"      onclick="setPreset('warm')">Warm</button>
-          <button class="preset-pill"        data-preset="cool"      onclick="setPreset('cool')">Cool</button>
-          <button class="preset-pill"        data-preset="bwhdr"     onclick="setPreset('bwhdr')">B&amp;W HDR</button>
-        </div>
+            // ── Timing learning ──────────────────────────────────────────────────────────
+            const _TK = "ts_vid_timings";
 
-        <div class="settings-group-label" style="margin-top:14px">Fine-tune</div>
-        <div class="slider-grid">
-          <label>Brightness</label>
-          <input type="range" id="op-brightness" min="-50" max="50" value="0" oninput="syncSlider('brightness',this.value)">
-          <span id="op-brightness-val">0</span>
+            function _loadTimings() {
+                try {
+                    return JSON.parse(localStorage.getItem(_TK)) || [];
+                } catch {
+                    return [];
+                }
+            }
 
-          <label>Contrast</label>
-          <input type="range" id="op-contrast" min="-50" max="50" value="0" oninput="syncSlider('contrast',this.value)">
-          <span id="op-contrast-val">0</span>
+            function _saveTimings(records) {
+                const all = [..._loadTimings(), ...records].slice(-100);
+                localStorage.setItem(_TK, JSON.stringify(all));
+            }
 
-          <label>Saturation</label>
-          <input type="range" id="op-saturation" min="-100" max="50" value="0" oninput="syncSlider('saturation',this.value)">
-          <span id="op-saturation-val">0</span>
+            // Estimate ms for one video based on its duration_s
+            function _estimateMs(duration_s) {
+                const all = _loadTimings();
+                const same = all.filter((t) =>
+                    duration_s < 30
+                        ? t.d < 30
+                        : duration_s < 120
+                          ? t.d >= 30 && t.d < 120
+                          : duration_s < 300
+                            ? t.d >= 120 && t.d < 300
+                            : t.d >= 300,
+                );
+                if (same.length >= 2)
+                    return same.reduce((s, t) => s + t.ms, 0) / same.length;
+                // Defaults when no data yet
+                if (duration_s < 30) return 25000;
+                if (duration_s < 120) return 40000;
+                if (duration_s < 300) return 55000;
+                return 70000;
+            }
 
-          <label>Sharpness</label>
-          <input type="range" id="op-sharpness" min="0" max="100" value="0" oninput="syncSlider('sharpness',this.value)">
-          <span id="op-sharpness-val">0</span>
-        </div>
+            function _fmtMs(ms) {
+                const s = Math.round(ms / 1000);
+                if (s < 90) return `~${s}s`;
+                return `~${Math.round(s / 60)} min`;
+            }
 
-      </div>
-    </div>
+            // Per-video timing state during an analysis run
+            let _vidTimings = [],
+                _lastCurrent = 0,
+                _lastCurrentTime = null;
 
-    <div>
-      <div class="section-label">05 — Trip Context</div>
-      <div class="field">
-        <label>Tell the AI about your trip</label>
-        <textarea id="tripContext" placeholder="e.g. Solo trip to Bali, Indonesia — March 2026. 10 days. Visited Ubud, Seminyak, Canggu. Lots of food, temples, rice fields, sunset sessions. Vibe: peaceful but adventurous."></textarea>
-      </div>
-    </div>
+            refreshAiStatus();
 
-    <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" disabled>
-      Analyze & Generate Plan
-    </button>
-    <div id="estimateHint" style="display:none; font-size:12px; color:var(--muted); margin-top:6px; font-family:'DM Mono',monospace;"></div>
-    <button class="btn btn-secondary" id="stopBtn" onclick="stopAnalyze()" style="display:none; margin-top:8px; border-color:var(--error); color:var(--error);">
-      ⏹ Stop & Get Results So Far
-    </button>
+            async function saveKey() {
+                const key = document.getElementById("apiKey").value.trim();
+                if (!key) return;
+                const r = await fetch("/api/set-key", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ api_key: key }),
+                });
+                if (r.ok) {
+                    document.getElementById("keyDot").classList.add("ok");
+                    document.getElementById("keyStatus").textContent = "set";
+                    checkAnalyzeBtn();
+                }
+            }
 
-    <div id="minnalSection" style="display:none">
-      <div class="section-label">06 — Schedule via Minnal</div>
-      <div class="field">
-        <label>Minnal API Key</label>
-        <input type="password" id="minnalKey" placeholder="sk_..." oninput="onMinnalKeyInput(this.value)" />
-      </div>
-      <div class="field" style="margin-top:10px">
-        <label>Brand</label>
-        <select id="minnalBrand" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;padding:10px 14px;width:100%;outline:none;">
-          <option value="">— load brands —</option>
-        </select>
-      </div>
-    </div>
+            async function scanFolder() {
+                const folder = document
+                    .getElementById("folderPath")
+                    .value.trim();
+                if (!folder) return;
 
-  </div>
+                const btn = document.getElementById("scanBtn");
+                const status = document.getElementById("scanStatus");
+                btn.disabled = true;
+                btn.textContent = "Scanning…";
+                status.style.display = "block";
+                status.textContent = "Reading folder…";
 
-  <!-- RIGHT PANEL -->
-  <div class="panel-right" id="rightPanel">
+                try {
+                    const r = await fetch("/api/scan-folder", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ folder }),
+                    });
+                    const data = await r.json();
+                    if (data.error) {
+                        status.textContent = `✗ ${data.error}`;
+                        return;
+                    }
 
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">🎬</div>
-      <h2>READY WHEN YOU ARE</h2>
-      <p style="font-size:13px; text-align:center; max-width:300px">
-        Set your API key, scan a folder, pick your videos, add trip context — then hit Analyze.
-      </p>
-    </div>
+                    videos = data.videos;
+                    selectedVideos = new Set(videos.map((v) => v.path));
+                    renderVideoList();
+                    document.getElementById("videoSection").style.display =
+                        "block";
+                    updateVideoCount();
+                    status.textContent = `✓ ${videos.length} videos found`;
+                    status.style.color = "var(--success)";
+                    checkAnalyzeBtn();
+                } catch (e) {
+                    status.textContent = `✗ ${e.message}`;
+                    status.style.color = "var(--error)";
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = "Scan Folder";
+                }
+            }
 
-    <div id="analyzeCounter" style="display:none; font-family:'DM Mono',monospace; font-size:13px; color:var(--accent); font-weight:500; margin-bottom:8px;"></div>
-    <div class="progress-box" id="progressBox"></div>
-
-    <div id="planOutput" style="display:none"></div>
-
-  </div>
-</div>
-
-<script>
-  let videos = [];
-  let selectedVideos = new Set();
-  let planData = null;
-  let progressInterval = null;
-
-  // ── Timing learning ──────────────────────────────────────────────────────────
-  const _TK = 'ts_vid_timings';
-
-  function _loadTimings() {
-    try { return JSON.parse(localStorage.getItem(_TK)) || []; } catch { return []; }
-  }
-
-  function _saveTimings(records) {
-    const all = [..._loadTimings(), ...records].slice(-100);
-    localStorage.setItem(_TK, JSON.stringify(all));
-  }
-
-  // Estimate ms for one video based on its duration_s
-  function _estimateMs(duration_s) {
-    const all = _loadTimings();
-    const same = all.filter(t =>
-      duration_s < 30  ? t.d < 30 :
-      duration_s < 120 ? t.d >= 30  && t.d < 120 :
-      duration_s < 300 ? t.d >= 120 && t.d < 300 : t.d >= 300
-    );
-    if (same.length >= 2)
-      return same.reduce((s, t) => s + t.ms, 0) / same.length;
-    // Defaults when no data yet
-    if (duration_s < 30)  return 25000;
-    if (duration_s < 120) return 40000;
-    if (duration_s < 300) return 55000;
-    return 70000;
-  }
-
-  function _fmtMs(ms) {
-    const s = Math.round(ms / 1000);
-    if (s < 90) return `~${s}s`;
-    return `~${Math.round(s / 60)} min`;
-  }
-
-  // Per-video timing state during an analysis run
-  let _vidTimings = [], _lastCurrent = 0, _lastCurrentTime = null;
-
-  refreshAiStatus();
-
-  async function saveKey() {
-    const key = document.getElementById('apiKey').value.trim();
-    if (!key) return;
-    const r = await fetch('/api/set-key', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({api_key: key})
-    });
-    if (r.ok) {
-      document.getElementById('keyDot').classList.add('ok');
-      document.getElementById('keyStatus').textContent = 'set';
-      checkAnalyzeBtn();
-    }
-  }
-
-  async function scanFolder() {
-    const folder = document.getElementById('folderPath').value.trim();
-    if (!folder) return;
-
-    const btn = document.getElementById('scanBtn');
-    const status = document.getElementById('scanStatus');
-    btn.disabled = true;
-    btn.textContent = 'Scanning…';
-    status.style.display = 'block';
-    status.textContent = 'Reading folder…';
-
-    try {
-      const r = await fetch('/api/scan-folder', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({folder})
-      });
-      const data = await r.json();
-      if (data.error) { status.textContent = `✗ ${data.error}`; return; }
-
-      videos = data.videos;
-      selectedVideos = new Set(videos.map(v => v.path));
-      renderVideoList();
-      document.getElementById('videoSection').style.display = 'block';
-      updateVideoCount();
-      status.textContent = `✓ ${videos.length} videos found`;
-      status.style.color = 'var(--success)';
-      checkAnalyzeBtn();
-    } catch(e) {
-      status.textContent = `✗ ${e.message}`;
-      status.style.color = 'var(--error)';
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Scan Folder';
-    }
-  }
-
-  function renderVideoList() {
-    const list = document.getElementById('videoList');
-    list.innerHTML = '';
-    videos.forEach(v => {
-      const item = document.createElement('div');
-      item.className = 'video-item' + (selectedVideos.has(v.path) ? ' selected' : '');
-      item.innerHTML = `
-        <input type="checkbox" ${selectedVideos.has(v.path) ? 'checked' : ''} onchange="toggleVideo('${v.path}', this.checked)">
+            function renderVideoList() {
+                const list = document.getElementById("videoList");
+                list.innerHTML = "";
+                videos.forEach((v) => {
+                    const item = document.createElement("div");
+                    item.className =
+                        "video-item" +
+                        (selectedVideos.has(v.path) ? " selected" : "");
+                    item.innerHTML = `
+        <input type="checkbox" ${selectedVideos.has(v.path) ? "checked" : ""} onchange="toggleVideo('${v.path}', this.checked)">
         <div class="video-info">
           <div class="video-name">${v.filename}</div>
-          <div class="video-meta">${v.duration_str || '?'} · ${v.size_mb || '?'} MB · ${(v.creation_time||'').slice(0,10)||'unknown date'}</div>
+          <div class="video-meta">${v.duration_str || "?"} · ${v.size_mb || "?"} MB · ${(v.creation_time || "").slice(0, 10) || "unknown date"}</div>
         </div>
       `;
-      item.onclick = (e) => {
-        if (e.target.type !== 'checkbox') {
-          const cb = item.querySelector('input');
-          cb.checked = !cb.checked;
-          toggleVideo(v.path, cb.checked);
-        }
-      };
-      list.appendChild(item);
-    });
-  }
+                    item.onclick = (e) => {
+                        if (e.target.type !== "checkbox") {
+                            const cb = item.querySelector("input");
+                            cb.checked = !cb.checked;
+                            toggleVideo(v.path, cb.checked);
+                        }
+                    };
+                    list.appendChild(item);
+                });
+            }
 
-  function toggleVideo(path, checked) {
-    if (checked) selectedVideos.add(path);
-    else selectedVideos.delete(path);
-    document.querySelectorAll('.video-item').forEach((el, i) => {
-      el.classList.toggle('selected', selectedVideos.has(videos[i].path));
-    });
-    checkAnalyzeBtn();
-  }
+            function toggleVideo(path, checked) {
+                if (checked) selectedVideos.add(path);
+                else selectedVideos.delete(path);
+                document.querySelectorAll(".video-item").forEach((el, i) => {
+                    el.classList.toggle(
+                        "selected",
+                        selectedVideos.has(videos[i].path),
+                    );
+                });
+                checkAnalyzeBtn();
+            }
 
-  function selectAll() { selectedVideos = new Set(videos.map(v=>v.path)); renderVideoList(); checkAnalyzeBtn(); }
-  function selectNone() { selectedVideos.clear(); renderVideoList(); checkAnalyzeBtn(); }
+            function selectAll() {
+                selectedVideos = new Set(videos.map((v) => v.path));
+                renderVideoList();
+                checkAnalyzeBtn();
+            }
+            function selectNone() {
+                selectedVideos.clear();
+                renderVideoList();
+                checkAnalyzeBtn();
+            }
 
-  function updateVideoCount() {
-    const total = videos.length;
-    const sel   = selectedVideos.size;
-    document.getElementById('videoCount').textContent =
-      total ? `${sel} of ${total} selected` : '';
-  }
+            function updateVideoCount() {
+                const total = videos.length;
+                const sel = selectedVideos.size;
+                document.getElementById("videoCount").textContent = total
+                    ? `${sel} of ${total} selected`
+                    : "";
+            }
 
-  function checkAnalyzeBtn() {
-    const hasKey    = document.getElementById('keyDot').classList.contains('ok');
-    const hasVideos = selectedVideos.size > 0;
-    document.getElementById('analyzeBtn').disabled = !(hasKey && hasVideos);
-    updateVideoCount();
+            function checkAnalyzeBtn() {
+                const hasKey = document
+                    .getElementById("keyDot")
+                    .classList.contains("ok");
+                const hasVideos = selectedVideos.size > 0;
+                document.getElementById("analyzeBtn").disabled = !(
+                    hasKey && hasVideos
+                );
+                updateVideoCount();
 
-    const hint = document.getElementById('estimateHint');
-    if (hasVideos) {
-      const paths = Array.from(selectedVideos);
-      const totalMs = videos
-        .filter(v => paths.includes(v.path))
-        .reduce((sum, v) => sum + _estimateMs(v.duration || 60), 0);
-      const hasHistory = _loadTimings().length >= 2;
-      const label = hasHistory ? 'based on your history' : 'rough estimate';
-      hint.textContent = `⏱ ${_fmtMs(totalMs)} for ${selectedVideos.size} video${selectedVideos.size > 1 ? 's' : ''} · ${label}`;
-      hint.style.display = 'block';
-    } else {
-      hint.style.display = 'none';
-    }
-  }
+                const hint = document.getElementById("estimateHint");
+                if (hasVideos) {
+                    const paths = Array.from(selectedVideos);
+                    const totalMs = videos
+                        .filter((v) => paths.includes(v.path))
+                        .reduce(
+                            (sum, v) => sum + _estimateMs(v.duration || 60),
+                            0,
+                        );
+                    const hasHistory = _loadTimings().length >= 2;
+                    const label = hasHistory
+                        ? "based on your history"
+                        : "rough estimate";
+                    hint.textContent = `⏱ ${_fmtMs(totalMs)} for ${selectedVideos.size} video${selectedVideos.size > 1 ? "s" : ""} · ${label}`;
+                    hint.style.display = "block";
+                } else {
+                    hint.style.display = "none";
+                }
+            }
 
-  function startProgressPolling() {
-    const box = document.getElementById('progressBox');
-    const counter = document.getElementById('analyzeCounter');
-    box.classList.add('active');
-    box.innerHTML = '';
-    counter.style.display = 'none';
+            function startProgressPolling() {
+                const box = document.getElementById("progressBox");
+                const counter = document.getElementById("analyzeCounter");
+                box.classList.add("active");
+                box.innerHTML = "";
+                counter.style.display = "none";
 
-    // Reset per-video timing trackers
-    _vidTimings = [];
-    _lastCurrent = 0;
-    _lastCurrentTime = Date.now();
+                // Reset per-video timing trackers
+                _vidTimings = [];
+                _lastCurrent = 0;
+                _lastCurrentTime = Date.now();
 
-    let lastCount = 0;
-    progressInterval = setInterval(async () => {
-      const r = await fetch('/api/progress');
-      const d = await r.json();
-      const logs = d.logs || [];
-      if (logs.length > lastCount) {
-        for (let i = lastCount; i < logs.length; i++) {
-          const line = document.createElement('div');
-          line.className = 'progress-line';
-          line.textContent = logs[i];
-          box.appendChild(line);
-        }
-        box.scrollTop = box.scrollHeight;
-        lastCount = logs.length;
-      }
-      if (d.total > 0) {
-        counter.style.display = 'block';
-        counter.textContent = `${d.current} / ${d.total} videos analysed`;
+                let lastCount = 0;
+                progressInterval = setInterval(async () => {
+                    const r = await fetch("/api/progress");
+                    const d = await r.json();
+                    const logs = d.logs || [];
+                    if (logs.length > lastCount) {
+                        for (let i = lastCount; i < logs.length; i++) {
+                            const line = document.createElement("div");
+                            line.className = "progress-line";
+                            line.textContent = logs[i];
+                            box.appendChild(line);
+                        }
+                        box.scrollTop = box.scrollHeight;
+                        lastCount = logs.length;
+                    }
+                    if (d.total > 0) {
+                        counter.style.display = "block";
+                        counter.textContent = `${d.current} / ${d.total} videos analysed`;
 
-        // Track per-video elapsed time as each video completes
-        if (d.current > _lastCurrent) {
-          const now = Date.now();
-          const elapsed = now - _lastCurrentTime;
-          const vidPaths = Array.from(selectedVideos);
-          const justDoneIdx = _lastCurrent; // 0-based index of completed video
-          if (justDoneIdx < vidPaths.length) {
-            const vid = videos.find(v => v.path === vidPaths[justDoneIdx]);
-            if (vid?.duration) _vidTimings.push({ d: vid.duration, ms: elapsed });
-          }
-          _lastCurrent = d.current;
-          _lastCurrentTime = now;
-        }
-      }
-    }, 800);
-  }
+                        // Track per-video elapsed time as each video completes
+                        if (d.current > _lastCurrent) {
+                            const now = Date.now();
+                            const elapsed = now - _lastCurrentTime;
+                            const vidPaths = Array.from(selectedVideos);
+                            const justDoneIdx = _lastCurrent; // 0-based index of completed video
+                            if (justDoneIdx < vidPaths.length) {
+                                const vid = videos.find(
+                                    (v) => v.path === vidPaths[justDoneIdx],
+                                );
+                                if (vid?.duration)
+                                    _vidTimings.push({
+                                        d: vid.duration,
+                                        ms: elapsed,
+                                    });
+                            }
+                            _lastCurrent = d.current;
+                            _lastCurrentTime = now;
+                        }
+                    }
+                }, 800);
+            }
 
-  function stopProgressPolling() {
-    if (progressInterval) clearInterval(progressInterval);
-    document.getElementById('analyzeCounter').style.display = 'none';
-  }
+            function stopProgressPolling() {
+                if (progressInterval) clearInterval(progressInterval);
+                document.getElementById("analyzeCounter").style.display =
+                    "none";
+            }
 
-  async function stopAnalyze() {
-    const stopBtn = document.getElementById('stopBtn');
-    stopBtn.disabled = true;
-    stopBtn.textContent = 'Stopping after current video…';
-    await fetch('/api/stop-analyze', { method: 'POST' });
-  }
+            async function stopAnalyze() {
+                const stopBtn = document.getElementById("stopBtn");
+                stopBtn.disabled = true;
+                stopBtn.textContent = "Stopping after current video…";
+                await fetch("/api/stop-analyze", { method: "POST" });
+            }
 
-  async function analyze() {
-    const btn = document.getElementById('analyzeBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Analyzing...';
-    stopBtn.style.display = 'block';
-    stopBtn.disabled = false;
-    stopBtn.textContent = '⏹ Stop & Get Results So Far';
+            async function analyze() {
+                const btn = document.getElementById("analyzeBtn");
+                const stopBtn = document.getElementById("stopBtn");
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+                stopBtn.style.display = "block";
+                stopBtn.disabled = false;
+                stopBtn.textContent = "⏹ Stop & Get Results So Far";
 
-    document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('planOutput').style.display = 'none';
-    startProgressPolling();
+                document.getElementById("emptyState").style.display = "none";
+                document.getElementById("planOutput").style.display = "none";
+                startProgressPolling();
 
-    const tripContext = document.getElementById('tripContext').value;
-    const r = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        videos: Array.from(selectedVideos),
-        trip_context: tripContext
-      })
-    });
+                const tripContext =
+                    document.getElementById("tripContext").value;
+                const r = await fetch("/api/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        videos: Array.from(selectedVideos),
+                        trip_context: tripContext,
+                    }),
+                });
 
-    stopProgressPolling();
-    if (_vidTimings.length > 0) _saveTimings(_vidTimings);
-    document.getElementById('progressBox').classList.remove('active');
-    document.getElementById('stopBtn').style.display = 'none';
+                stopProgressPolling();
+                if (_vidTimings.length > 0) _saveTimings(_vidTimings);
+                document
+                    .getElementById("progressBox")
+                    .classList.remove("active");
+                document.getElementById("stopBtn").style.display = "none";
 
-    const data = await r.json();
-    btn.disabled = false;
-    btn.innerHTML = 'Analyze & Generate Plan';
-    checkAnalyzeBtn(); // refresh estimate hint with updated history
+                const data = await r.json();
+                btn.disabled = false;
+                btn.innerHTML = "Analyze & Generate Plan";
+                checkAnalyzeBtn(); // refresh estimate hint with updated history
 
-    if (data.error) { alert(data.error); return; }
-    planData = data;
-    renderPlan(data);
-    document.getElementById('minnalSection').style.display = 'block';
-  }
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+                planData = data;
+                renderPlan(data);
+                document.getElementById("minnalSection").style.display =
+                    "block";
+            }
 
-  function renderPlan(data) {
-    const plan = data.plan || {};
-    const shorts = plan.shorts || [];
-    const out = document.getElementById('planOutput');
+            function renderPlan(data) {
+                const plan = data.plan || {};
+                const shorts = plan.shorts || [];
+                const out = document.getElementById("planOutput");
 
-    let html = `
+                let html = `
       <div class="plan-header">
-        <div class="series-title">${plan.series_title || 'YOUR TRAVEL SERIES'}</div>
-        <p class="narrative">${plan.narrative || ''}</p>
-        ${plan.posting_schedule ? `<span class="schedule-badge">📅 ${plan.posting_schedule}</span>` : ''}
+        <div class="series-title">${plan.series_title || "YOUR TRAVEL SERIES"}</div>
+        <p class="narrative">${plan.narrative || ""}</p>
+        ${plan.posting_schedule ? `<span class="schedule-badge">📅 ${plan.posting_schedule}</span>` : ""}
       </div>
 
       <div class="cut-all-bar">
-        <p id="cutAllStatus">${shorts.length} short${shorts.length !== 1 ? 's' : ''} ready — cut all clips to your output folder</p>
+        <p id="cutAllStatus">${shorts.length} short${shorts.length !== 1 ? "s" : ""} ready — cut all clips to your output folder</p>
         <button class="btn btn-secondary" style="width:auto" onclick="downloadPlan()">📋 Download Plan</button>
         <button class="btn btn-danger" style="width:auto" id="cutAllBtn" onclick="cutAll()">✂️ Cut All Clips</button>
       </div>
@@ -1034,42 +1681,60 @@
       <div class="shorts-grid">
     `;
 
-    shorts.forEach((s, i) => {
-      const tags = (s.hashtags || []).map(t => `<span class="tag">${t}</span>`).join('');
-      const segs = s.segments || (s.source_video ? [{
-        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
-      }] : []);
-      const segHtml = segs.map((seg, si) => {
-        const name = (seg.source_video || 'unknown').split(/[/\\]/).pop();
-        return `<span class="seg-badge">▶ ${name} &nbsp;${seg.start_time || '0:00'}–${seg.end_time || '0:30'}</span>`;
-      }).join('');
-      html += `
+                shorts.forEach((s, i) => {
+                    const tags = (s.hashtags || [])
+                        .map((t) => `<span class="tag">${t}</span>`)
+                        .join("");
+                    const segs =
+                        s.segments ||
+                        (s.source_video
+                            ? [
+                                  {
+                                      source_video: s.source_video,
+                                      start_time: s.start_time,
+                                      end_time: s.end_time,
+                                  },
+                              ]
+                            : []);
+                    const segHtml = segs
+                        .map((seg, si) => {
+                            const name = (seg.source_video || "unknown")
+                                .split(/[/\\]/)
+                                .pop();
+                            return `<span class="seg-badge">▶ ${name} &nbsp;${seg.start_time || "0:00"}–${seg.end_time || "0:30"}</span>`;
+                        })
+                        .join("");
+                    html += `
         <div class="short-card" id="card-${i}">
           <div class="short-header">
-            <div class="short-number">${String(i+1).padStart(2,'0')}</div>
+            <div class="short-number">${String(i + 1).padStart(2, "0")}</div>
             <div class="short-title-block">
-              <div class="short-title">${s.title || 'Untitled'}</div>
+              <div class="short-title">${s.title || "Untitled"}</div>
               <div class="segments-list">${segHtml}</div>
             </div>
           </div>
           <div class="short-body">
             <div class="short-field" style="grid-column:1/-1">
               <label>Hook</label>
-              <p class="hook-text">"${s.hook || ''}"</p>
+              <p class="hook-text">"${s.hook || ""}"</p>
             </div>
             <div class="short-field">
               <label>Caption</label>
-              <p>${s.caption || ''}</p>
+              <p>${s.caption || ""}</p>
             </div>
             <div class="short-field">
               <label>Hashtags</label>
               <div class="hashtags">${tags}</div>
             </div>
-            ${s.ffmpeg_command ? `
+            ${
+                s.ffmpeg_command
+                    ? `
             <div class="short-field" style="grid-column:1/-1">
               <label>FFmpeg Command</label>
               <div class="ffmpeg-box">${s.ffmpeg_command}</div>
-            </div>` : ''}
+            </div>`
+                    : ""
+            }
           </div>
           <div class="short-actions">
             <button class="btn btn-secondary" onclick="cutClip(${i})">✂️ Cut This Clip</button>
@@ -1099,586 +1764,796 @@
           </div>
         </div>
       `;
-    });
+                });
 
-    html += `</div>`;
-    out.innerHTML = html;
-    out.style.display = 'block';
-  }
+                html += `</div>`;
+                out.innerHTML = html;
+                out.style.display = "block";
+            }
 
-  function resolveSourcePath(sourceVideo) {
-    const analyses = planData?.analyses || [];
-    const sv = sourceVideo || '';
-    const hit = analyses.find(a =>
-      a.video === sv ||
-      (a.video || '').replace(/\\/g, '/').endsWith(sv.replace(/\\/g, '/')) ||
-      sv.replace(/\\/g, '/').endsWith((a.meta?.filename || ''))
-    );
-    if (hit) return hit.video;
-    return Array.from(selectedVideos).find(p => p.includes(sv)) || sv;
-  }
+            function resolveSourcePath(sourceVideo) {
+                const analyses = planData?.analyses || [];
+                const sv = sourceVideo || "";
+                const hit = analyses.find(
+                    (a) =>
+                        a.video === sv ||
+                        (a.video || "")
+                            .replace(/\\/g, "/")
+                            .endsWith(sv.replace(/\\/g, "/")) ||
+                        sv.replace(/\\/g, "/").endsWith(a.meta?.filename || ""),
+                );
+                if (hit) return hit.video;
+                return (
+                    Array.from(selectedVideos).find((p) => p.includes(sv)) || sv
+                );
+            }
 
-  async function cutClip(index) {
-    const shorts = planData?.plan?.shorts || [];
-    const s = shorts[index];
-    if (!s) return;
+            async function cutClip(index) {
+                const shorts = planData?.plan?.shorts || [];
+                const s = shorts[index];
+                if (!s) return;
 
-    const btn      = document.querySelector(`#card-${index} .btn-secondary`);
-    const statusEl = document.getElementById(`status-${index}`);
-    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Cutting…'; }
-    if (statusEl) { statusEl.style.display = 'none'; }
+                const btn = document.querySelector(
+                    `#card-${index} .btn-secondary`,
+                );
+                const statusEl = document.getElementById(`status-${index}`);
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner"></span> Cutting…';
+                }
+                if (statusEl) {
+                    statusEl.style.display = "none";
+                }
 
-    // Build resolved segments list
-    const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
-      source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
-    }] : []);
-    const segments = rawSegs.map(seg => ({
-      ...seg,
-      source_video: resolveSourcePath(seg.source_video)
-    }));
+                // Build resolved segments list
+                const rawSegs = s.segments?.length
+                    ? s.segments
+                    : s.source_video
+                      ? [
+                            {
+                                source_video: s.source_video,
+                                start_time: s.start_time,
+                                end_time: s.end_time,
+                            },
+                        ]
+                      : [];
+                const segments = rawSegs.map((seg) => ({
+                    ...seg,
+                    source_video: resolveSourcePath(seg.source_video),
+                }));
 
-    try {
-      const r = await fetch('/api/cut-clip', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          segments,
-          title: `Short_${index+1}_${(s.title||'clip').replace(/[^a-zA-Z0-9]/g,'_')}`
-        })
-      });
-      const d = await r.json();
-      if (statusEl) {
-        statusEl.style.display = 'flex';
-        if (d.ok) {
-          statusEl.innerHTML = `✓ Saved to output/`;
-          statusEl.style.color = 'var(--success)';
-        } else {
-          statusEl.innerHTML = `✗ ${d.error || 'Failed'}`;
-          statusEl.style.color = 'var(--error)';
-        }
-      }
-    } catch (e) {
-      if (statusEl) {
-        statusEl.style.display = 'flex';
-        statusEl.innerHTML = `✗ ${e.message}`;
-        statusEl.style.color = 'var(--error)';
-      }
-    } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = '✂️ Cut This Clip'; }
-    }
-  }
+                try {
+                    const r = await fetch("/api/cut-clip", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            segments,
+                            title: `Short_${index + 1}_${(s.title || "clip").replace(/[^a-zA-Z0-9]/g, "_")}`,
+                        }),
+                    });
+                    const d = await r.json();
+                    if (statusEl) {
+                        statusEl.style.display = "flex";
+                        if (d.ok) {
+                            statusEl.innerHTML = `✓ Saved to output/`;
+                            statusEl.style.color = "var(--success)";
+                        } else {
+                            statusEl.innerHTML = `✗ ${d.error || "Failed"}`;
+                            statusEl.style.color = "var(--error)";
+                        }
+                    }
+                } catch (e) {
+                    if (statusEl) {
+                        statusEl.style.display = "flex";
+                        statusEl.innerHTML = `✗ ${e.message}`;
+                        statusEl.style.color = "var(--error)";
+                    }
+                } finally {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.innerHTML = "✂️ Cut This Clip";
+                    }
+                }
+            }
 
-  function downloadPlan() {
-    const plan = planData?.plan || {};
-    const shorts = plan.shorts || [];
+            function downloadPlan() {
+                const plan = planData?.plan || {};
+                const shorts = plan.shorts || [];
 
-    const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
+                const escape = (v) =>
+                    `"${String(v || "").replace(/"/g, '""')}"`;
 
-    const headers = ['Order', 'Output File', 'Segments', 'Title', 'Hook', 'Caption', 'Hashtags'];
-    const rows = shorts.map((s, i) => {
-      const order = s.order || (i + 1);
-      const safeTitle = (s.title || `Short_${order}`).replace(/[^a-z0-9]/gi, '_').substring(0, 40);
-      const outputFile = `Short_${order}_${safeTitle}.mp4`;
-      const segs = s.segments?.length ? s.segments : (s.source_video ? [{
-        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
-      }] : []);
-      const segStr = segs.map(seg =>
-        `${(seg.source_video || '').split(/[/\\]/).pop()} ${seg.start_time || ''}–${seg.end_time || ''}`
-      ).join(' | ');
-      return [
-        order,
-        outputFile,
-        segStr,
-        s.title || '',
-        s.hook || '',
-        s.caption || '',
-        (s.hashtags || []).join(' ')
-      ].map(escape).join(',');
-    });
+                const headers = [
+                    "Order",
+                    "Output File",
+                    "Segments",
+                    "Title",
+                    "Hook",
+                    "Caption",
+                    "Hashtags",
+                ];
+                const rows = shorts.map((s, i) => {
+                    const order = s.order || i + 1;
+                    const safeTitle = (s.title || `Short_${order}`)
+                        .replace(/[^a-z0-9]/gi, "_")
+                        .substring(0, 40);
+                    const outputFile = `Short_${order}_${safeTitle}.mp4`;
+                    const segs = s.segments?.length
+                        ? s.segments
+                        : s.source_video
+                          ? [
+                                {
+                                    source_video: s.source_video,
+                                    start_time: s.start_time,
+                                    end_time: s.end_time,
+                                },
+                            ]
+                          : [];
+                    const segStr = segs
+                        .map(
+                            (seg) =>
+                                `${(seg.source_video || "").split(/[/\\]/).pop()} ${seg.start_time || ""}–${seg.end_time || ""}`,
+                        )
+                        .join(" | ");
+                    return [
+                        order,
+                        outputFile,
+                        segStr,
+                        s.title || "",
+                        s.hook || "",
+                        s.caption || "",
+                        (s.hashtags || []).join(" "),
+                    ]
+                        .map(escape)
+                        .join(",");
+                });
 
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(plan.series_title || 'travel-shorts-plan').replace(/[^a-z0-9]/gi, '_')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+                const csv = [headers.join(","), ...rows].join("\n");
+                const blob = new Blob([csv], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${(plan.series_title || "travel-shorts-plan").replace(/[^a-z0-9]/gi, "_")}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
 
-  async function cutAll() {
-    const shorts = planData?.plan?.shorts || [];
-    if (!shorts.length) { alert('No plan loaded — run Analyze first.'); return; }
+            async function cutAll() {
+                const shorts = planData?.plan?.shorts || [];
+                if (!shorts.length) {
+                    alert("No plan loaded — run Analyze first.");
+                    return;
+                }
 
-    const btn       = document.getElementById('cutAllBtn');
-    const statusTxt = document.getElementById('cutAllStatus');
-    const box       = document.getElementById('progressBox');
+                const btn = document.getElementById("cutAllBtn");
+                const statusTxt = document.getElementById("cutAllStatus");
+                const box = document.getElementById("progressBox");
 
-    // ── Lock UI ────────────────────────────────────────────────────────────
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Cutting…';
-    box.innerHTML = '';
-    box.classList.add('active');
-    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                // ── Lock UI ────────────────────────────────────────────────────────────
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Cutting…';
+                box.innerHTML = "";
+                box.classList.add("active");
+                box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 
-    const enriched = shorts.map(s => {
-      const rawSegs = s.segments?.length ? s.segments : (s.source_video ? [{
-        source_video: s.source_video, start_time: s.start_time, end_time: s.end_time
-      }] : []);
-      return {
-        ...s,
-        segments: rawSegs.map(seg => ({
-          ...seg,
-          source_video: resolveSourcePath(seg.source_video)
-        }))
-      };
-    });
+                const enriched = shorts.map((s) => {
+                    const rawSegs = s.segments?.length
+                        ? s.segments
+                        : s.source_video
+                          ? [
+                                {
+                                    source_video: s.source_video,
+                                    start_time: s.start_time,
+                                    end_time: s.end_time,
+                                },
+                            ]
+                          : [];
+                    return {
+                        ...s,
+                        segments: rawSegs.map((seg) => ({
+                            ...seg,
+                            source_video: resolveSourcePath(seg.source_video),
+                        })),
+                    };
+                });
 
-    // ── Poll progress log while cutting ────────────────────────────────────
-    let lastLogCount = 0;
-    const pollId = setInterval(async () => {
-      try {
-        const pr = await fetch('/api/progress');
-        const pd = await pr.json();
-        const logs = pd.logs || [];
-        if (logs.length > lastLogCount) {
-          for (let i = lastLogCount; i < logs.length; i++) {
-            const line = document.createElement('div');
-            line.className = 'progress-line';
-            line.textContent = logs[i];
-            box.appendChild(line);
-          }
-          box.scrollTop = box.scrollHeight;
-          lastLogCount = logs.length;
-        }
-      } catch { /* ignore poll errors */ }
-    }, 600);
+                // ── Poll progress log while cutting ────────────────────────────────────
+                let lastLogCount = 0;
+                const pollId = setInterval(async () => {
+                    try {
+                        const pr = await fetch("/api/progress");
+                        const pd = await pr.json();
+                        const logs = pd.logs || [];
+                        if (logs.length > lastLogCount) {
+                            for (let i = lastLogCount; i < logs.length; i++) {
+                                const line = document.createElement("div");
+                                line.className = "progress-line";
+                                line.textContent = logs[i];
+                                box.appendChild(line);
+                            }
+                            box.scrollTop = box.scrollHeight;
+                            lastLogCount = logs.length;
+                        }
+                    } catch {
+                        /* ignore poll errors */
+                    }
+                }, 600);
 
-    try {
-      const r = await fetch('/api/cut-all', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({shorts: enriched})
-      });
+                try {
+                    const r = await fetch("/api/cut-all", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ shorts: enriched }),
+                    });
 
-      clearInterval(pollId);
+                    clearInterval(pollId);
 
-      if (!r.ok) {
-        const txt = await r.text();
-        throw new Error(`Server error ${r.status}: ${txt.slice(0, 200)}`);
-      }
+                    if (!r.ok) {
+                        const txt = await r.text();
+                        throw new Error(
+                            `Server error ${r.status}: ${txt.slice(0, 200)}`,
+                        );
+                    }
 
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
+                    const d = await r.json();
+                    if (d.error) throw new Error(d.error);
 
-      // ── Update per-card status ──────────────────────────────────────────
-      let okCount = 0, failCount = 0;
-      (d.results || []).forEach((res, i) => {
-        const el = document.getElementById(`status-${i}`);
-        if (el) {
-          el.style.display = 'flex';
-          if (res.ok) {
-            el.innerHTML = '✓ Saved';
-            el.style.color = 'var(--success)';
-            okCount++;
-          } else {
-            el.innerHTML = `✗ Failed`;
-            el.style.color = 'var(--error)';
-            failCount++;
-          }
-        }
-      });
+                    // ── Update per-card status ──────────────────────────────────────────
+                    let okCount = 0,
+                        failCount = 0;
+                    (d.results || []).forEach((res, i) => {
+                        const el = document.getElementById(`status-${i}`);
+                        if (el) {
+                            el.style.display = "flex";
+                            if (res.ok) {
+                                el.innerHTML = "✓ Saved";
+                                el.style.color = "var(--success)";
+                                okCount++;
+                            } else {
+                                el.innerHTML = `✗ Failed`;
+                                el.style.color = "var(--error)";
+                                failCount++;
+                            }
+                        }
+                    });
 
-      statusTxt.textContent = failCount
-        ? `${okCount} saved, ${failCount} failed — see log above`
-        : `✓ ${okCount} clip${okCount !== 1 ? 's' : ''} saved to output/`;
+                    statusTxt.textContent = failCount
+                        ? `${okCount} saved, ${failCount} failed — see log above`
+                        : `✓ ${okCount} clip${okCount !== 1 ? "s" : ""} saved to output/`;
 
-      // Show a final log line
-      const done = document.createElement('div');
-      done.className = 'progress-line';
-      done.textContent = failCount
-        ? `⚠ Done with ${failCount} error(s) — check messages above`
-        : `✓ All done! ${okCount} clip${okCount !== 1 ? 's' : ''} in the output folder.`;
-      box.appendChild(done);
-      box.scrollTop = box.scrollHeight;
+                    // Show a final log line
+                    const done = document.createElement("div");
+                    done.className = "progress-line";
+                    done.textContent = failCount
+                        ? `⚠ Done with ${failCount} error(s) — check messages above`
+                        : `✓ All done! ${okCount} clip${okCount !== 1 ? "s" : ""} in the output folder.`;
+                    box.appendChild(done);
+                    box.scrollTop = box.scrollHeight;
+                } catch (e) {
+                    clearInterval(pollId);
+                    statusTxt.textContent = `✗ ${e.message}`;
+                    const errLine = document.createElement("div");
+                    errLine.className = "progress-line";
+                    errLine.textContent = `Error: ${e.message}`;
+                    errLine.style.color = "var(--error)";
+                    box.appendChild(errLine);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = "✂️ Cut All Clips";
+                }
+            }
 
-    } catch (e) {
-      clearInterval(pollId);
-      statusTxt.textContent = `✗ ${e.message}`;
-      const errLine = document.createElement('div');
-      errLine.className = 'progress-line';
-      errLine.textContent = `Error: ${e.message}`;
-      errLine.style.color = 'var(--error)';
-      box.appendChild(errLine);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '✂️ Cut All Clips';
-    }
-  }
+            // ── Settings ────────────────────────────────────────────────────────────────
 
-  // ── Settings ────────────────────────────────────────────────────────────────
+            let _activeTab = "gemini";
+            let _aiProvider = "gemini"; // tracks actual provider, independent of active tab
+            let _outputFormat = "shorts";
+            let _syncSliderTimer = null;
 
-  let _activeTab  = 'gemini';
-  let _aiProvider = 'gemini';   // tracks actual provider, independent of active tab
-  let _outputFormat = 'shorts';
-  let _syncSliderTimer = null;
+            const PRESETS = {
+                natural: {
+                    brightness: 0,
+                    contrast: 0,
+                    saturation: 0,
+                    sharpness: 0,
+                },
+                vivid: {
+                    brightness: 5,
+                    contrast: 10,
+                    saturation: 40,
+                    sharpness: 30,
+                },
+                cinematic: {
+                    brightness: -5,
+                    contrast: 15,
+                    saturation: -15,
+                    sharpness: 20,
+                },
+                warm: {
+                    brightness: 3,
+                    contrast: 5,
+                    saturation: 10,
+                    sharpness: 10,
+                },
+                cool: {
+                    brightness: 0,
+                    contrast: 5,
+                    saturation: -10,
+                    sharpness: 10,
+                },
+                bwhdr: {
+                    brightness: -5,
+                    contrast: 30,
+                    saturation: -100,
+                    sharpness: 25,
+                },
+            };
 
-  const PRESETS = {
-    natural:   { brightness:  0, contrast:  0, saturation:   0, sharpness:  0 },
-    vivid:     { brightness:  5, contrast: 10, saturation:  40, sharpness: 30 },
-    cinematic: { brightness: -5, contrast: 15, saturation: -15, sharpness: 20 },
-    warm:      { brightness:  3, contrast:  5, saturation:  10, sharpness: 10 },
-    cool:      { brightness:  0, contrast:  5, saturation: -10, sharpness: 10 },
-    bwhdr:     { brightness: -5, contrast: 30, saturation: -100, sharpness: 25 },
-  };
+            // ── Output popover ──────────────────────────────────────────────────────────
 
-  // ── Output popover ──────────────────────────────────────────────────────────
+            function toggleOutputPopover() {
+                const pop = document.getElementById("outputPopover");
+                const btn = document.getElementById("outputToggleBtn");
+                if (pop.classList.contains("open")) {
+                    pop.classList.remove("open");
+                    btn.classList.remove("open");
+                } else {
+                    // Load current values from server then open
+                    fetch("/api/settings")
+                        .then((r) => r.json())
+                        .then((d) => {
+                            setOutputFormat(
+                                d.output_format || "shorts",
+                                /*save=*/ false,
+                            );
+                            document.getElementById("op-smart-crop").checked =
+                                d.smart_crop !== false;
+                            const vals = {
+                                brightness: d.filter_brightness || 0,
+                                contrast: d.filter_contrast || 0,
+                                saturation: d.filter_saturation || 0,
+                                sharpness: d.filter_sharpness || 0,
+                            };
+                            [
+                                "brightness",
+                                "contrast",
+                                "saturation",
+                                "sharpness",
+                            ].forEach((k) => {
+                                document.getElementById(`op-${k}`).value =
+                                    vals[k];
+                                document.getElementById(
+                                    `op-${k}-val`,
+                                ).textContent = vals[k];
+                            });
+                            // Highlight matching preset pill (if any)
+                            _highlightMatchingPreset(vals);
+                            updateOutputLabel();
+                        });
+                    pop.classList.add("open");
+                    btn.classList.add("open");
+                    // Check OpenCV status when popover opens
+                    checkOpenCV();
+                }
+            }
 
-  function toggleOutputPopover() {
-    const pop = document.getElementById('outputPopover');
-    const btn = document.getElementById('outputToggleBtn');
-    if (pop.classList.contains('open')) {
-      pop.classList.remove('open');
-      btn.classList.remove('open');
-    } else {
-      // Load current values from server then open
-      fetch('/api/settings').then(r => r.json()).then(d => {
-        setOutputFormat(d.output_format || 'shorts', /*save=*/false);
-        document.getElementById('op-smart-crop').checked = d.smart_crop !== false;
-        const vals = {
-          brightness: d.filter_brightness || 0,
-          contrast:   d.filter_contrast   || 0,
-          saturation: d.filter_saturation || 0,
-          sharpness:  d.filter_sharpness  || 0,
-        };
-        ['brightness','contrast','saturation','sharpness'].forEach(k => {
-          document.getElementById(`op-${k}`).value = vals[k];
-          document.getElementById(`op-${k}-val`).textContent = vals[k];
-        });
-        // Highlight matching preset pill (if any)
-        _highlightMatchingPreset(vals);
-        updateOutputLabel();
-      });
-      pop.classList.add('open');
-      btn.classList.add('open');
-      // Check OpenCV status when popover opens
-      checkOpenCV();
-    }
-  }
+            async function checkOpenCV() {
+                const el = document.getElementById("opencvStatus");
+                if (!el) return;
+                el.textContent = "…";
+                el.style.color = "var(--muted)";
+                try {
+                    const r = await fetch("/api/test-opencv");
+                    if (!r.ok) {
+                        // 404 = old server running without this endpoint, 500 = server error
+                        el.textContent =
+                            r.status === 404
+                                ? "↻ restart app"
+                                : `✗ server err ${r.status}`;
+                        el.style.color = "var(--error)";
+                        return;
+                    }
+                    const d = await r.json();
+                    if (d.ok && d.classifier_loaded) {
+                        el.textContent = `✓ OpenCV ${d.version}`;
+                        el.style.color = "var(--success)";
+                    } else if (d.ok && !d.classifier_loaded) {
+                        el.textContent = `⚠ cascade missing`;
+                        el.style.color = "var(--error)";
+                    } else {
+                        el.textContent = `✗ pip install opencv-python-headless`;
+                        el.style.color = "var(--error)";
+                    }
+                } catch {
+                    el.textContent = "↻ restart app";
+                    el.style.color = "var(--muted)";
+                }
+            }
 
-  async function checkOpenCV() {
-    const el = document.getElementById('opencvStatus');
-    if (!el) return;
-    el.textContent = '…';
-    el.style.color = 'var(--muted)';
-    try {
-      const r = await fetch('/api/test-opencv');
-      if (!r.ok) {
-        // 404 = old server running without this endpoint, 500 = server error
-        el.textContent = r.status === 404 ? '↻ restart app' : `✗ server err ${r.status}`;
-        el.style.color = 'var(--error)';
-        return;
-      }
-      const d = await r.json();
-      if (d.ok && d.classifier_loaded) {
-        el.textContent = `✓ OpenCV ${d.version}`;
-        el.style.color = 'var(--success)';
-      } else if (d.ok && !d.classifier_loaded) {
-        el.textContent = `⚠ cascade missing`;
-        el.style.color = 'var(--error)';
-      } else {
-        el.textContent = `✗ pip install opencv-python-headless`;
-        el.style.color = 'var(--error)';
-      }
-    } catch {
-      el.textContent = '↻ restart app';
-      el.style.color = 'var(--muted)';
-    }
-  }
+            // Close popover when clicking outside the outputStep wrapper
+            document.addEventListener("click", (e) => {
+                const step = document.getElementById("outputStep");
+                const pop = document.getElementById("outputPopover");
+                const btn = document.getElementById("outputToggleBtn");
+                if (step && pop && !step.contains(e.target)) {
+                    pop.classList.remove("open");
+                    btn && btn.classList.remove("open");
+                }
+            });
 
-  // Close popover when clicking outside the outputStep wrapper
-  document.addEventListener('click', (e) => {
-    const step = document.getElementById('outputStep');
-    const pop  = document.getElementById('outputPopover');
-    const btn  = document.getElementById('outputToggleBtn');
-    if (step && pop && !step.contains(e.target)) {
-      pop.classList.remove('open');
-      btn && btn.classList.remove('open');
-    }
-  });
+            function _highlightMatchingPreset(vals) {
+                let matched = null;
+                for (const [name, p] of Object.entries(PRESETS)) {
+                    if (
+                        p.brightness === +vals.brightness &&
+                        p.contrast === +vals.contrast &&
+                        p.saturation === +vals.saturation &&
+                        p.sharpness === +vals.sharpness
+                    ) {
+                        matched = name;
+                        break;
+                    }
+                }
+                document
+                    .querySelectorAll(".preset-pill")
+                    .forEach((el) =>
+                        el.classList.toggle(
+                            "active",
+                            el.dataset.preset === matched,
+                        ),
+                    );
+            }
 
-  function _highlightMatchingPreset(vals) {
-    let matched = null;
-    for (const [name, p] of Object.entries(PRESETS)) {
-      if (p.brightness === +vals.brightness && p.contrast === +vals.contrast &&
-          p.saturation === +vals.saturation && p.sharpness === +vals.sharpness) {
-        matched = name; break;
-      }
-    }
-    document.querySelectorAll('.preset-pill').forEach(el =>
-      el.classList.toggle('active', el.dataset.preset === matched));
-  }
+            function updateOutputLabel() {
+                const fmtNames = {
+                    shorts: "YT Shorts",
+                    reels: "Reels",
+                    tiktok: "TikTok",
+                };
+                document.getElementById("opFormatLabel").textContent =
+                    fmtNames[_outputFormat] || "YT Shorts";
 
-  function updateOutputLabel() {
-    const fmtNames = { shorts: 'YT Shorts', reels: 'Reels', tiktok: 'TikTok' };
-    document.getElementById('opFormatLabel').textContent = fmtNames[_outputFormat] || 'YT Shorts';
+                const activePill = document.querySelector(
+                    ".preset-pill.active",
+                );
+                const presetText = activePill
+                    ? activePill.textContent.trim()
+                    : "Custom";
+                document.getElementById("opLookLabel").textContent = presetText;
 
-    const activePill = document.querySelector('.preset-pill.active');
-    const presetText = activePill ? activePill.textContent.trim() : 'Custom';
-    document.getElementById('opLookLabel').textContent = presetText;
+                const cropOn =
+                    document.getElementById("op-smart-crop")?.checked ?? true;
+                document.getElementById("opCropLabel").textContent = cropOn
+                    ? " · Crop ✓"
+                    : "";
+            }
 
-    const cropOn = document.getElementById('op-smart-crop')?.checked ?? true;
-    document.getElementById('opCropLabel').textContent = cropOn ? ' · Crop ✓' : '';
-  }
+            async function saveOutputSettings() {
+                await fetch("/api/settings", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        output_format: _outputFormat,
+                        smart_crop:
+                            document.getElementById("op-smart-crop").checked,
+                        filter_brightness:
+                            +document.getElementById("op-brightness").value,
+                        filter_contrast:
+                            +document.getElementById("op-contrast").value,
+                        filter_saturation:
+                            +document.getElementById("op-saturation").value,
+                        filter_sharpness:
+                            +document.getElementById("op-sharpness").value,
+                    }),
+                }).catch(() => {});
+                updateOutputLabel();
+            }
 
-  async function saveOutputSettings() {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        output_format:     _outputFormat,
-        smart_crop:        document.getElementById('op-smart-crop').checked,
-        filter_brightness: +document.getElementById('op-brightness').value,
-        filter_contrast:   +document.getElementById('op-contrast').value,
-        filter_saturation: +document.getElementById('op-saturation').value,
-        filter_sharpness:  +document.getElementById('op-sharpness').value,
-      })
-    }).catch(() => {});
-    updateOutputLabel();
-  }
+            function setOutputFormat(fmt, save = true) {
+                _outputFormat = fmt;
+                document
+                    .querySelectorAll(".fmt-pill")
+                    .forEach((el) =>
+                        el.classList.toggle("active", el.dataset.fmt === fmt),
+                    );
+                updateOutputLabel();
+                if (save) saveOutputSettings();
+            }
 
-  function setOutputFormat(fmt, save = true) {
-    _outputFormat = fmt;
-    document.querySelectorAll('.fmt-pill').forEach(el =>
-      el.classList.toggle('active', el.dataset.fmt === fmt));
-    updateOutputLabel();
-    if (save) saveOutputSettings();
-  }
+            function setPreset(name) {
+                const p = PRESETS[name];
+                ["brightness", "contrast", "saturation", "sharpness"].forEach(
+                    (k) => {
+                        document.getElementById(`op-${k}`).value = p[k];
+                        document.getElementById(`op-${k}-val`).textContent =
+                            p[k];
+                    },
+                );
+                document
+                    .querySelectorAll(".preset-pill")
+                    .forEach((el) =>
+                        el.classList.toggle(
+                            "active",
+                            el.dataset.preset === name,
+                        ),
+                    );
+                updateOutputLabel();
+                saveOutputSettings();
+            }
 
-  function setPreset(name) {
-    const p = PRESETS[name];
-    ['brightness','contrast','saturation','sharpness'].forEach(k => {
-      document.getElementById(`op-${k}`).value = p[k];
-      document.getElementById(`op-${k}-val`).textContent = p[k];
-    });
-    document.querySelectorAll('.preset-pill').forEach(el =>
-      el.classList.toggle('active', el.dataset.preset === name));
-    updateOutputLabel();
-    saveOutputSettings();
-  }
+            function syncSlider(key, val) {
+                document.getElementById(`op-${key}-val`).textContent = val;
+                // Clear preset highlight — user is now in "Custom" mode
+                document
+                    .querySelectorAll(".preset-pill")
+                    .forEach((el) => el.classList.remove("active"));
+                updateOutputLabel();
+                // Debounce the API save so we don't spam while dragging
+                clearTimeout(_syncSliderTimer);
+                _syncSliderTimer = setTimeout(saveOutputSettings, 400);
+            }
 
-  function syncSlider(key, val) {
-    document.getElementById(`op-${key}-val`).textContent = val;
-    // Clear preset highlight — user is now in "Custom" mode
-    document.querySelectorAll('.preset-pill').forEach(el => el.classList.remove('active'));
-    updateOutputLabel();
-    // Debounce the API save so we don't spam while dragging
-    clearTimeout(_syncSliderTimer);
-    _syncSliderTimer = setTimeout(saveOutputSettings, 400);
-  }
+            // ── AI Settings modal ───────────────────────────────────────────────────────
 
-  // ── AI Settings modal ───────────────────────────────────────────────────────
+            function openSettings() {
+                fetch("/api/settings")
+                    .then((r) => r.json())
+                    .then((d) => {
+                        _aiProvider = d.ai_provider || "gemini";
+                        document.getElementById("s-ollama-host").value =
+                            d.ollama_host || "";
+                        document.getElementById("s-ollama-model").value =
+                            d.ollama_model || "";
+                        switchTab(
+                            _aiProvider === "ollama" ? "ollama" : "gemini",
+                        );
+                    });
+                document
+                    .getElementById("settingsOverlay")
+                    .classList.add("open");
+                document.getElementById("settingsSaveStatus").textContent = "";
+            }
 
-  function openSettings() {
-    fetch('/api/settings').then(r => r.json()).then(d => {
-      _aiProvider = d.ai_provider || 'gemini';
-      document.getElementById('s-ollama-host').value  = d.ollama_host  || '';
-      document.getElementById('s-ollama-model').value = d.ollama_model || '';
-      switchTab(_aiProvider === 'ollama' ? 'ollama' : 'gemini');
-    });
-    document.getElementById('settingsOverlay').classList.add('open');
-    document.getElementById('settingsSaveStatus').textContent = '';
-  }
+            function closeSettings() {
+                document
+                    .getElementById("settingsOverlay")
+                    .classList.remove("open");
+            }
 
-  function closeSettings() {
-    document.getElementById('settingsOverlay').classList.remove('open');
-  }
+            function switchTab(name) {
+                _activeTab = name;
+                // Only update the actual AI provider when user explicitly picks Gemini or Ollama
+                if (name === "gemini" || name === "ollama") _aiProvider = name;
+                document.querySelectorAll(".tab").forEach((t, i) => {
+                    const tabs = ["gemini", "ollama", "minnal"];
+                    t.classList.toggle("active", tabs[i] === name);
+                });
+                document
+                    .querySelectorAll(".tab-panel")
+                    .forEach((p) => p.classList.remove("active"));
+                document.getElementById(`tab-${name}`).classList.add("active");
+            }
 
-  function switchTab(name) {
-    _activeTab = name;
-    // Only update the actual AI provider when user explicitly picks Gemini or Ollama
-    if (name === 'gemini' || name === 'ollama') _aiProvider = name;
-    document.querySelectorAll('.tab').forEach((t, i) => {
-      const tabs = ['gemini','ollama','minnal'];
-      t.classList.toggle('active', tabs[i] === name);
-    });
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById(`tab-${name}`).classList.add('active');
-  }
+            async function saveSettings() {
+                const status = document.getElementById("settingsSaveStatus");
+                status.textContent = "Saving…";
+                const body = {
+                    ai_provider: _aiProvider,
+                    ollama_host: document
+                        .getElementById("s-ollama-host")
+                        .value.trim(),
+                    ollama_model: document
+                        .getElementById("s-ollama-model")
+                        .value.trim(),
+                };
+                const geminiKey = document
+                    .getElementById("s-gemini-key")
+                    .value.trim();
+                if (geminiKey) body.gemini_api_key = geminiKey;
+                const minnalKey = document
+                    .getElementById("s-minnal-key")
+                    .value.trim();
+                if (minnalKey) body.minnal_api_key = minnalKey;
 
-  async function saveSettings() {
-    const status = document.getElementById('settingsSaveStatus');
-    status.textContent = 'Saving…';
-    const body = {
-      ai_provider:  _aiProvider,
-      ollama_host:  document.getElementById('s-ollama-host').value.trim(),
-      ollama_model: document.getElementById('s-ollama-model').value.trim(),
-    };
-    const geminiKey = document.getElementById('s-gemini-key').value.trim();
-    if (geminiKey) body.gemini_api_key = geminiKey;
-    const minnalKey = document.getElementById('s-minnal-key').value.trim();
-    if (minnalKey) body.minnal_api_key = minnalKey;
+                try {
+                    const r = await fetch("/api/settings", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(body),
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        status.textContent = "✓ Saved";
+                        status.style.color = "var(--success)";
+                        refreshAiStatus();
+                        setTimeout(closeSettings, 800);
+                    } else {
+                        status.textContent = `✗ ${d.error}`;
+                        status.style.color = "var(--error)";
+                    }
+                } catch (e) {
+                    status.textContent = `✗ ${e.message}`;
+                    status.style.color = "var(--error)";
+                }
+            }
 
-    try {
-      const r = await fetch('/api/settings', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(body)
-      });
-      const d = await r.json();
-      if (d.ok) {
-        status.textContent = '✓ Saved';
-        status.style.color = 'var(--success)';
-        refreshAiStatus();
-        setTimeout(closeSettings, 800);
-      } else {
-        status.textContent = `✗ ${d.error}`;
-        status.style.color = 'var(--error)';
-      }
-    } catch(e) {
-      status.textContent = `✗ ${e.message}`;
-      status.style.color = 'var(--error)';
-    }
-  }
+            async function testOllamaConnection() {
+                const btn = document.getElementById("ollamaTestBtn");
+                const status = document.getElementById("ollamaTestStatus");
+                const host =
+                    document.getElementById("s-ollama-host").value.trim() ||
+                    "http://localhost:11434";
+                const model =
+                    document.getElementById("s-ollama-model").value.trim() ||
+                    "gemma4:31b-cloud";
+                btn.disabled = true;
+                status.textContent = "Connecting…";
+                status.style.color = "";
+                try {
+                    const r = await fetch("/api/test-ollama", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ host, model }),
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        const found = d.model_found
+                            ? `✓ Connected — ${model} ready`
+                            : `⚠ Connected but model not pulled yet. Run: ollama pull ${model}`;
+                        status.textContent = found;
+                        status.style.color = d.model_found
+                            ? "var(--success)"
+                            : "var(--warning, #f59e0b)";
+                    } else {
+                        status.textContent = `✗ ${d.error}`;
+                        status.style.color = "var(--error)";
+                    }
+                } catch (e) {
+                    status.textContent = `✗ Cannot reach app server — is Travel Shorts AI running?`;
+                    status.style.color = "var(--error)";
+                }
+                btn.disabled = false;
+            }
 
-  async function testOllamaConnection() {
-    const btn    = document.getElementById('ollamaTestBtn');
-    const status = document.getElementById('ollamaTestStatus');
-    const host   = document.getElementById('s-ollama-host').value.trim() || 'http://localhost:11434';
-    const model  = document.getElementById('s-ollama-model').value.trim() || 'gemma4:31b-cloud';
-    btn.disabled = true;
-    status.textContent = 'Connecting…';
-    status.style.color = '';
-    try {
-      const r = await fetch('/api/test-ollama', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({host, model})
-      });
-      const d = await r.json();
-      if (d.ok) {
-        const found = d.model_found
-          ? `✓ Connected — ${model} ready`
-          : `⚠ Connected but model not pulled yet. Run: ollama pull ${model}`;
-        status.textContent = found;
-        status.style.color = d.model_found ? 'var(--success)' : 'var(--warning, #f59e0b)';
-      } else {
-        status.textContent = `✗ ${d.error}`;
-        status.style.color = 'var(--error)';
-      }
-    } catch(e) {
-      status.textContent = `✗ Cannot reach app server — is Travel Shorts AI running?`;
-      status.style.color = 'var(--error)';
-    }
-    btn.disabled = false;
-  }
+            async function refreshAiStatus() {
+                const r = await fetch("/api/status");
+                const d = await r.json();
+                const isOllama = d.provider === "ollama";
+                document.getElementById("aiProviderLabel").textContent =
+                    isOllama ? `01 — ${d.model}` : "01 — Gemini API";
+                document.getElementById("aiProviderHint").innerHTML = isOllama
+                    ? `Running via <span style="color:var(--accent)">Ollama</span>`
+                    : `Powered by <span style="color:var(--accent)">Google Gemini</span>`;
+                const dot = document.getElementById("keyDot");
+                const ks = document.getElementById("keyStatus");
+                if (d.key_set) {
+                    dot.classList.add("ok");
+                    ks.textContent = "connected";
+                    checkAnalyzeBtn();
+                } else {
+                    dot.classList.remove("ok");
+                    ks.textContent = "not set";
+                }
+            }
 
-  async function refreshAiStatus() {
-    const r = await fetch('/api/status');
-    const d = await r.json();
-    const isOllama = d.provider === 'ollama';
-    document.getElementById('aiProviderLabel').textContent = isOllama ? `01 — ${d.model}` : '01 — Gemini API';
-    document.getElementById('aiProviderHint').innerHTML = isOllama
-      ? `Running via <span style="color:var(--accent)">Ollama</span>`
-      : `Powered by <span style="color:var(--accent)">Google Gemini</span>`;
-    const dot = document.getElementById('keyDot');
-    const ks  = document.getElementById('keyStatus');
-    if (d.key_set) { dot.classList.add('ok'); ks.textContent = 'connected'; checkAnalyzeBtn(); }
-    else           { dot.classList.remove('ok'); ks.textContent = 'not set'; }
-  }
+            // ── Minnal ──────────────────────────────────────────────────────────────────
 
-  // ── Minnal ──────────────────────────────────────────────────────────────────
+            let minnalBrands = [];
 
-  let minnalBrands = [];
+            function onMinnalKeyInput(val) {
+                const key = (val || "").trim();
+                localStorage.setItem("minnalKey", key);
+                if (key.length > 10) loadMinnalBrands(key);
+            }
 
-  function onMinnalKeyInput(val) {
-    const key = (val || '').trim();
-    localStorage.setItem('minnalKey', key);
-    if (key.length > 10) loadMinnalBrands(key);
-  }
+            // Restore saved Minnal key on load
+            (function restoreMinnalKey() {
+                const saved = localStorage.getItem("minnalKey");
+                if (saved) {
+                    const el = document.getElementById("minnalKey");
+                    if (el) {
+                        el.value = saved;
+                    }
+                }
+            })();
 
-  // Restore saved Minnal key on load
-  (function restoreMinnalKey() {
-    const saved = localStorage.getItem('minnalKey');
-    if (saved) {
-      const el = document.getElementById('minnalKey');
-      if (el) { el.value = saved; }
-    }
-  })();
+            async function loadMinnalBrands(key) {
+                const sel = document.getElementById("minnalBrand");
+                sel.innerHTML = "<option>Loading...</option>";
+                try {
+                    const r = await fetch("/api/minnal/brands", {
+                        headers: { "X-Minnal-Key": key },
+                    });
+                    minnalBrands = await r.json();
+                    sel.innerHTML = minnalBrands
+                        .map(
+                            (b) => `<option value="${b.id}">${b.name}</option>`,
+                        )
+                        .join("");
+                } catch (e) {
+                    sel.innerHTML = "<option>Failed to load</option>";
+                }
+            }
 
-  async function loadMinnalBrands(key) {
-    const sel = document.getElementById('minnalBrand');
-    sel.innerHTML = '<option>Loading...</option>';
-    try {
-      const r = await fetch('/api/minnal/brands', {
-        headers: { 'X-Minnal-Key': key }
-      });
-      minnalBrands = await r.json();
-      sel.innerHTML = minnalBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
-    } catch(e) {
-      sel.innerHTML = '<option>Failed to load</option>';
-    }
-  }
+            function toggleScheduleDrawer(i) {
+                const drawer = document.getElementById(`drawer-${i}`);
+                drawer.classList.toggle("open");
+                // Set default datetime to tomorrow 9am
+                if (drawer.classList.contains("open")) {
+                    const dt = document.getElementById(`dt-${i}`);
+                    if (!dt.value) {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 1);
+                        d.setHours(9, 0, 0, 0);
+                        dt.value = d.toISOString().slice(0, 16);
+                    }
+                }
+            }
 
-  function toggleScheduleDrawer(i) {
-    const drawer = document.getElementById(`drawer-${i}`);
-    drawer.classList.toggle('open');
-    // Set default datetime to tomorrow 9am
-    if (drawer.classList.contains('open')) {
-      const dt = document.getElementById(`dt-${i}`);
-      if (!dt.value) {
-        const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0);
-        dt.value = d.toISOString().slice(0, 16);
-      }
-    }
-  }
+            async function scheduleToMinnal(i) {
+                const key = document.getElementById("minnalKey")?.value.trim();
+                if (!key) {
+                    alert("Enter your Minnal API key in the left panel first.");
+                    return;
+                }
+                const brandId = document.getElementById("minnalBrand")?.value;
+                if (!brandId) {
+                    alert("Select a brand first.");
+                    return;
+                }
 
-  async function scheduleToMinnal(i) {
-    const key = document.getElementById('minnalKey')?.value.trim();
-    if (!key) { alert('Enter your Minnal API key in the left panel first.'); return; }
-    const brandId = document.getElementById('minnalBrand')?.value;
-    if (!brandId) { alert('Select a brand first.'); return; }
+                const shorts = planData?.plan?.shorts || [];
+                const s = shorts[i];
+                if (!s) return;
 
-    const shorts = planData?.plan?.shorts || [];
-    const s = shorts[i];
-    if (!s) return;
+                const platform = document.getElementById(`plat-${i}`).value;
+                const dtVal = document.getElementById(`dt-${i}`).value;
+                if (!dtVal) {
+                    alert("Pick a date and time.");
+                    return;
+                }
 
-    const platform = document.getElementById(`plat-${i}`).value;
-    const dtVal = document.getElementById(`dt-${i}`).value;
-    if (!dtVal) { alert('Pick a date and time.'); return; }
+                const content = [
+                    s.hook,
+                    s.caption,
+                    (s.hashtags || []).join(" "),
+                ]
+                    .filter(Boolean)
+                    .join("\n\n");
+                const btn = document.getElementById(`sched-btn-${i}`);
+                const statusEl = document.getElementById(`sched-status-${i}`);
+                btn.disabled = true;
+                statusEl.textContent = "Scheduling…";
 
-    const content = [s.hook, s.caption, (s.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
-    const btn = document.getElementById(`sched-btn-${i}`);
-    const statusEl = document.getElementById(`sched-status-${i}`);
-    btn.disabled = true;
-    statusEl.textContent = 'Scheduling…';
-
-    try {
-      const r = await fetch('/api/minnal/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Minnal-Key': key },
-        body: JSON.stringify({
-          brand_id: brandId,
-          platform,
-          content,
-          scheduled_for: new Date(dtVal).toISOString()
-        })
-      });
-      const d = await r.json();
-      if (d.ok) {
-        statusEl.textContent = '✓ Scheduled';
-        statusEl.style.color = 'var(--success)';
-      } else {
-        statusEl.textContent = `✗ ${d.error || 'Failed'}`;
-        statusEl.style.color = 'var(--error)';
-        btn.disabled = false;
-      }
-    } catch(e) {
-      statusEl.textContent = `✗ ${e.message}`;
-      statusEl.style.color = 'var(--error)';
-      btn.disabled = false;
-    }
-  }
-</script>
-</body>
+                try {
+                    const r = await fetch("/api/minnal/schedule", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-Minnal-Key": key,
+                        },
+                        body: JSON.stringify({
+                            brand_id: brandId,
+                            platform,
+                            content,
+                            scheduled_for: new Date(dtVal).toISOString(),
+                        }),
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        statusEl.textContent = "✓ Scheduled";
+                        statusEl.style.color = "var(--success)";
+                    } else {
+                        statusEl.textContent = `✗ ${d.error || "Failed"}`;
+                        statusEl.style.color = "var(--error)";
+                        btn.disabled = false;
+                    }
+                } catch (e) {
+                    statusEl.textContent = `✗ ${e.message}`;
+                    statusEl.style.color = "var(--error)";
+                    btn.disabled = false;
+                }
+            }
+        </script>
+    </body>
 </html>
