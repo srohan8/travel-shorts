@@ -1519,6 +1519,7 @@
             let selectedVideos = new Set();
             let planData = null;
             let progressInterval = null;
+            let _activeRunId = null; // null = fresh analysis, string = loaded from history
 
             // ── Timing learning ──────────────────────────────────────────────────────────
             const _TK = "ts_vid_timings";
@@ -1823,11 +1824,49 @@
                     alert(data.error);
                     return;
                 }
+                _activeRunId = null;
                 planData = data;
                 renderPlan(data);
                 document.getElementById("minnalSection").style.display = "block";
                 // Auto-switch to Plan panel on mobile
                 if (window.innerWidth < 768) switchMobilePanel("plan");
+            }
+
+            async function regeneratePlan() {
+                const btn = document.getElementById("regenBtn");
+                if (!btn) return;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Regenerating…';
+
+                const box = document.getElementById("progressBox");
+                box.innerHTML = "";
+                box.classList.add("active");
+
+                try {
+                    const r = await fetch("/api/regenerate-plan", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            vibe: _selectedVibe,
+                            run_id: _activeRunId || undefined,
+                        }),
+                    });
+                    const data = await r.json();
+                    if (data.error) {
+                        alert(`Regenerate failed: ${data.error}`);
+                        return;
+                    }
+                    _activeRunId = null;  // now a fresh plan
+                    planData = data;
+                    renderPlan(data);
+                    box.classList.remove("active");
+                } catch (e) {
+                    alert(`Regenerate failed: ${e.message}`);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = "♻️ Regenerate Plan";
+                    box.classList.remove("active");
+                }
             }
 
             function renderPlan(data) {
@@ -1845,6 +1884,7 @@
       <div class="cut-all-bar">
         <p id="cutAllStatus">${shorts.length} short${shorts.length !== 1 ? "s" : ""} ready — cut all clips to your output folder</p>
         <button class="btn btn-secondary" style="width:auto" onclick="downloadPlan()">📋 Download Plan</button>
+        <button class="btn btn-secondary" style="width:auto" id="regenBtn" onclick="regeneratePlan()">♻️ Regenerate Plan</button>
         <button class="btn btn-danger" style="width:auto" id="cutAllBtn" onclick="cutAll()">✂️ Cut All Clips</button>
       </div>
 
@@ -2842,6 +2882,7 @@
             async function loadRun(id) {
                 const r = await fetch(`/api/runs/${id}`);
                 const data = await r.json();
+                _activeRunId = id;
                 planData = data;
                 renderPlan(data);
                 document.getElementById('emptyState').style.display = 'none';

@@ -72,6 +72,39 @@ FORMAT_MAX_DURATION = {"shorts": 60, "reels": 90, "tiktok": 600}
 
 OUTPUT_DIR = _APP_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
+CACHE_DIR = OUTPUT_DIR / "cache"
+CACHE_DIR.mkdir(exist_ok=True)
+
+# ── Per-video analysis cache (keyed on filename + filesize) ──────────────────
+def _cache_key(video_path):
+    try:
+        size = os.path.getsize(video_path)
+    except Exception:
+        size = 0
+    return f"{Path(video_path).name}_{size}"
+
+def _load_cache(video_path):
+    p = CACHE_DIR / f"{_cache_key(video_path)}.json"
+    if p.exists():
+        try:
+            with open(p) as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+def _save_cache(video_path, analysis):
+    p = CACHE_DIR / f"{_cache_key(video_path)}.json"
+    try:
+        with open(p, "w") as f:
+            json.dump(analysis, f, indent=2)
+    except Exception:
+        pass
+
+# ── Last-run analyses storage (for plan regeneration without re-analysis) ─────
+_last_all_analyses = []
+_last_video_metas  = []
+_last_trip_context = ""
 
 _ffmpeg_bin = _BUNDLE / "ffmpeg" / "bin"
 def _find_bin(name):
@@ -778,7 +811,7 @@ def analyze():
         if AI_PROVIDER == "gemini" and not GEMINI_API_KEY:
             return jsonify({"error": "Gemini API key not set"}), 400
 
-        global stop_requested
+        global stop_requested, _last_all_analyses, _last_video_metas, _last_trip_context
         stop_requested = False
         all_analyses = []
         video_metas = []
@@ -789,10 +822,23 @@ def analyze():
             if stop_requested:
                 log(f"Stopped early — generating plan from {len(all_analyses)} videos analysed so far...")
                 break
-            log(f"Extracting frames from {Path(video_path).name}...")
-            frames = extract_frames(video_path)
+
             meta = get_video_metadata(video_path)
             video_metas.append(meta)
+
+            # ── Check cache first ──────────────────────────────────────────────
+            cached = _load_cache(video_path)
+            if cached:
+                log(f"✓ Cache hit — {Path(video_path).name} (skipping AI call)")
+                cached["video"] = video_path
+                cached["meta"]  = meta
+                all_analyses.append(cached)
+                analyze_progress["current"] += 1
+                continue
+
+            # ── Fresh analysis ─────────────────────────────────────────────────
+            log(f"Extracting frames from {Path(video_path).name}...")
+            frames = extract_frames(video_path)
 
             if frames:
                 log(f"Analyzing {Path(video_path).name} with {AI_PROVIDER}...")
@@ -808,12 +854,18 @@ def analyze():
                         time.sleep(5)  # avoid free-tier rate limits between videos
                     analysis["video"] = video_path
                     analysis["meta"] = meta
+                    _save_cache(video_path, analysis)   # persist for next run
                     all_analyses.append(analysis)
                 except Exception as e:
                     log(f"Error analyzing {Path(video_path).name}: {e}")
                     all_analyses.append({"video": video_path, "meta": meta, "error": str(e)})
                 finally:
                     analyze_progress["current"] += 1
+
+        # Store for plan regeneration without re-analysis
+        _last_all_analyses = all_analyses
+        _last_video_metas  = video_metas
+        _last_trip_context = trip_context
 
         log("Generating overall content plan...")
         if AI_PROVIDER == "ollama":
@@ -896,6 +948,102 @@ def get_run(run_id):
         return jsonify({"error": "Run not found"}), 404
     with open(p) as f:
         return jsonify(json.load(f))
+
+
+@app.route("/api/regenerate-plan", methods=["POST"])
+def regenerate_plan():
+    """Regenerate the shorts plan from existing per-video analyses — no re-analysis needed."""
+    global _last_all_analyses, _last_video_metas, _last_trip_context
+    data = request.json or {}
+    vibe   = data.get("vibe", "cinematic")
+    run_id = data.get("run_id")   # optional — if from history drawer
+
+    # Resolve which analyses to use (priority: run_id → last in-memory → output/analysis.json)
+    all_analyses = None
+    trip_context = _last_trip_context
+    video_metas  = _last_video_metas
+
+    if run_id:
+        p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
+        if p.exists():
+            with open(p) as f:
+                saved = json.load(f)
+            all_analyses = saved.get("analyses", [])
+
+    if all_analyses is None and _last_all_analyses:
+        all_analyses = _last_all_analyses
+
+    if all_analyses is None:
+        p = OUTPUT_DIR / "analysis.json"
+        if p.exists():
+            with open(p) as f:
+                saved = json.load(f)
+            all_analyses = saved.get("analyses", [])
+
+    if not all_analyses:
+        return jsonify({"error": "No analysis data found — run Analyze first"}), 400
+
+    try:
+        log(f"Regenerating plan for {len(all_analyses)} videos (vibe: {vibe})...")
+
+        if AI_PROVIDER == "ollama":
+            plan = generate_shorts_plan_ollama(all_analyses, trip_context, video_metas, vibe=vibe)
+        elif AI_PROVIDER == "openai":
+            plan = generate_shorts_plan_openai(all_analyses, trip_context, video_metas, vibe=vibe)
+        elif AI_PROVIDER == "anthropic":
+            plan = generate_shorts_plan_anthropic(all_analyses, trip_context, video_metas, vibe=vibe)
+        else:
+            plan = generate_shorts_plan(all_analyses, trip_context, video_metas, vibe=vibe)
+
+        # Resolve filenames to full paths
+        def _resolve_path(sv):
+            for a in all_analyses:
+                full_path = a.get("video", "")
+                if sv == Path(full_path).name or sv in full_path or full_path.endswith(sv):
+                    return full_path
+            return sv
+
+        for short in plan.get("shorts", []):
+            if short.get("segments"):
+                for seg in short["segments"]:
+                    seg["source_video"] = _resolve_path(seg.get("source_video", ""))
+            elif short.get("source_video"):
+                resolved = _resolve_path(short["source_video"])
+                short["source_video"] = resolved
+                short["segments"] = [{
+                    "source_video": resolved,
+                    "start_time": short.get("start_time", "0:00"),
+                    "end_time":   short.get("end_time",   "0:45"),
+                }]
+
+        result = {"analyses": all_analyses, "plan": plan}
+
+        # Save as a new timestamped run
+        import datetime
+        new_run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        run_dir = OUTPUT_DIR / "runs" / new_run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "analysis.json", "w") as f:
+            json.dump(result, f, indent=2)
+        with open(run_dir / "meta.json", "w") as f:
+            json.dump({
+                "id":           new_run_id,
+                "date":         new_run_id,
+                "trip_context": trip_context[:120] if trip_context else "",
+                "video_count":  len(all_analyses),
+                "short_count":  len(plan.get("shorts", [])),
+                "series_title": plan.get("series_title", ""),
+                "provider":     AI_PROVIDER,
+            }, f)
+        with open(OUTPUT_DIR / "analysis.json", "w") as f:
+            json.dump(result, f, indent=2)
+
+        return jsonify(result)
+
+    except Exception as e:
+        log(f"Regenerate-plan error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 def to_seconds(t):
     if isinstance(t, (int, float)):
