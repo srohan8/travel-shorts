@@ -585,15 +585,20 @@
                     display: none;
                 }
                 .panel-right { padding: 20px 16px; display: none; }
-                .panel-left.mobile-active,
-                .panel-right.mobile-active { display: flex; }
+                /* mobile-active: left panel is flex-column, right panel is plain block */
+                .panel-left.mobile-active { display: flex; flex-direction: column; }
+                .panel-right.mobile-active { display: block; }
                 header { padding: 16px 16px 12px; flex-wrap: wrap; gap: 10px; }
                 .logo img { height: 36px; }
                 .short-body { grid-template-columns: 1fr; }
                 .cut-all-bar { flex-direction: column; align-items: stretch; }
             }
             @media (min-width: 768px) {
-                .panel-left, .panel-right { display: flex !important; }
+                /* Restore desktop defaults — panel-left is flex-col, panel-right is block */
+                .panel-left { display: flex !important; flex-direction: column !important; }
+                .panel-right { display: block !important; }
+                header { flex-wrap: nowrap !important; gap: 20px !important; padding: 40px 20px 20px !important; }
+                .logo img { height: 48px !important; }
             }
 
             .short-body {
