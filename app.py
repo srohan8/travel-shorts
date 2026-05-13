@@ -330,7 +330,9 @@ def generate_shorts_plan(all_analyses, trip_context, video_metas, vibe="cinemati
         ]
     }, indent=2)
 
-    prompt = _build_plan_prompt(summary, vibe)
+    video_count = len(all_analyses)
+    target_count = max(5, min(40, video_count // 4))
+    prompt = _build_plan_prompt(summary, vibe, target_count=target_count)
 
     response = client.models.generate_content(
         model="gemini-2.0-flash-lite",
@@ -406,7 +408,9 @@ def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas, vibe="c
         ]
     }, indent=2)
 
-    prompt = _build_plan_prompt(summary, vibe)
+    video_count = len(all_analyses)
+    target_count = max(5, min(40, video_count // 4))
+    prompt = _build_plan_prompt(summary, vibe, target_count=target_count)
 
     client = ollama_client.Client(host=OLLAMA_HOST)
     response = client.chat(
@@ -419,7 +423,7 @@ def generate_shorts_plan_ollama(all_analyses, trip_context, video_metas, vibe="c
         return json.loads(json_match.group())
     return {"shorts": [], "raw": text}
 
-def _build_plan_prompt(summary, vibe="cinematic"):
+def _build_plan_prompt(summary, vibe="cinematic", target_count=10):
     vibe_defs = {
         "cinematic": "evocative, atmospheric, 'made for the big screen'",
         "funny": "light, self-aware, playful — never cringe",
@@ -447,7 +451,7 @@ Hook structure: Each hook should be a setup in the first line that pays off in t
 
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. A curated series of YouTube Shorts ordered for maximum engagement. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short. Only use one segment if that single clip is already 30+ seconds and compelling on its own. Skip repetitive footage — quality over quantity.
+2. Exactly {target_count} YouTube Shorts — you MUST output all {target_count}, no fewer. Spread coverage across all source videos and use every good clip in the pool. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short. Only use one segment if that single clip is already 30+ seconds and is a standout moment.
 3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
 
@@ -494,11 +498,13 @@ def generate_shorts_plan_openai(all_analyses, trip_context, video_metas, vibe="c
             for clip in a.get("suggested_clips", [])
         ]
     }, indent=2)
-    prompt = _build_plan_prompt(summary, vibe)
+    video_count = len(all_analyses)
+    target_count = max(5, min(40, video_count // 4))
+    prompt = _build_plan_prompt(summary, vibe, target_count=target_count)
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=4000,
+        max_tokens=8000,
     )
     text = resp.choices[0].message.content
     json_match = re.search(r'\{[\s\S]*\}', text)
@@ -519,10 +525,12 @@ def generate_shorts_plan_anthropic(all_analyses, trip_context, video_metas, vibe
             for clip in a.get("suggested_clips", [])
         ]
     }, indent=2)
-    prompt = _build_plan_prompt(summary, vibe)
+    video_count = len(all_analyses)
+    target_count = max(5, min(40, video_count // 4))
+    prompt = _build_plan_prompt(summary, vibe, target_count=target_count)
     resp = client.messages.create(
         model=ANTHROPIC_MODEL,
-        max_tokens=4000,
+        max_tokens=8000,
         messages=[{"role": "user", "content": prompt}]
     )
     text = resp.content[0].text
