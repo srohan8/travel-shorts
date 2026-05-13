@@ -13,8 +13,8 @@ from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from dotenv import load_dotenv
 from dotenv import set_key as dotenv_set_key
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+from google import genai as google_genai
+from google.genai import types as genai_types
 from PIL import Image
 import tempfile
 import ollama as ollama_client
@@ -22,12 +22,12 @@ import urllib.request
 
 # Disable Gemini safety filters — travel content (action, adventure, risky activities)
 # routinely triggers the defaults and produces 400 "Output blocked" errors.
-_GEMINI_SAFETY = {
-    HarmCategory.HARM_CATEGORY_HARASSMENT:        HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_HATE_SPEECH:       HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-}
+_GEMINI_SAFETY = [
+    genai_types.SafetySetting(category="HARM_CATEGORY_HARASSMENT",        threshold="BLOCK_NONE"),
+    genai_types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH",       threshold="BLOCK_NONE"),
+    genai_types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+    genai_types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+]
 
 # ── Paths (works both in dev and when frozen by PyInstaller) ─────────────────
 if getattr(sys, 'frozen', False):
@@ -157,8 +157,7 @@ def extract_frames(video_path, num_frames=None):
 
 def analyze_video_with_gemini(video_path, trip_context, frames):
     """Send frames to Gemini for analysis"""
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite", safety_settings=_GEMINI_SAFETY)
+    client = google_genai.Client(api_key=GEMINI_API_KEY)
     
     parts = []
     parts.append(f"""You are a travel content analyst. Analyze these frames from a travel video.
@@ -215,7 +214,11 @@ Respond in this exact JSON format:
     
     for attempt in range(3):
         try:
-            response = model.generate_content(prompt_parts)
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-lite",
+                contents=prompt_parts,
+                config=genai_types.GenerateContentConfig(safety_settings=_GEMINI_SAFETY),
+            )
             break
         except Exception as e:
             if "429" in str(e) and attempt < 2:
@@ -234,8 +237,7 @@ Respond in this exact JSON format:
 
 def generate_shorts_plan(all_analyses, trip_context, video_metas):
     """Generate overall YouTube Shorts content plan"""
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite", safety_settings=_GEMINI_SAFETY)
+    client = google_genai.Client(api_key=GEMINI_API_KEY)
 
     summary = json.dumps({
         "trip_context": trip_context,
@@ -280,7 +282,11 @@ Respond in JSON:
   ]
 }}"""
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(
+        model="gemini-2.0-flash-lite",
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(safety_settings=_GEMINI_SAFETY),
+    )
     text = response.text
     json_match = re.search(r'\{[\s\S]*\}', text)
     if json_match:
@@ -691,10 +697,50 @@ def analyze():
         with open(OUTPUT_DIR / "analysis.json", "w") as f:
             json.dump(result, f, indent=2)
 
+        # Save timestamped run so users can reload without re-running
+        import datetime
+        run_id  = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        run_dir = OUTPUT_DIR / "runs" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "analysis.json", "w") as f:
+            json.dump(result, f, indent=2)
+        meta = {
+            "id":           run_id,
+            "date":         run_id,
+            "trip_context": trip_context[:120],
+            "video_count":  len(videos),
+            "short_count":  len(plan.get("shorts", [])),
+            "series_title": plan.get("series_title", ""),
+            "provider":     AI_PROVIDER,
+        }
+        with open(run_dir / "meta.json", "w") as f:
+            json.dump(meta, f)
+
         return jsonify(result)
     except Exception as e:
         log(f"Fatal error in analyze: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/runs")
+def list_runs():
+    runs_dir = OUTPUT_DIR / "runs"
+    if not runs_dir.exists():
+        return jsonify([])
+    runs = []
+    for d in sorted(runs_dir.iterdir(), reverse=True):
+        meta_path = d / "meta.json"
+        if meta_path.exists():
+            with open(meta_path) as f:
+                runs.append(json.load(f))
+    return jsonify(runs)
+
+@app.route("/api/runs/<run_id>")
+def get_run(run_id):
+    p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
+    if not p.exists():
+        return jsonify({"error": "Run not found"}), 404
+    with open(p) as f:
+        return jsonify(json.load(f))
 
 def to_seconds(t):
     if isinstance(t, (int, float)):

@@ -918,33 +918,10 @@
                 </div>
                 <div class="tagline">Turn your footage into stories</div>
             </div>
-            <button
-                onclick="openSettings()"
-                style="
-                    margin-left: auto;
-                    background: none;
-                    border: 1px solid var(--border);
-                    border-radius: 6px;
-                    color: var(--muted);
-                    cursor: pointer;
-                    padding: 6px 12px;
-                    font-size: 13px;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    transition: all 0.2s;
-                "
-                onmouseover="
-                    this.style.borderColor = 'var(--accent)';
-                    this.style.color = 'var(--accent)';
-                "
-                onmouseout="
-                    this.style.borderColor = 'var(--border)';
-                    this.style.color = 'var(--muted)';
-                "
-            >
-                ⚙️ Settings
-            </button>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                <button onclick="openHistory()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px;transition:all 0.2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">📂 History</button>
+                <button onclick="openSettings()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);cursor:pointer;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px;transition:all 0.2s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">⚙️ Settings</button>
+            </div>
         </header>
 
         <div class="main">
@@ -2553,6 +2530,53 @@
                     statusEl.style.color = "var(--error)";
                     btn.disabled = false;
                 }
+            }
+        </script>
+
+        <!-- History drawer -->
+        <div id="historyDrawer" style="position:fixed;top:0;right:-380px;width:360px;height:100vh;background:var(--surface);border-left:1px solid var(--border);z-index:500;transition:right .25s ease;padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--accent);letter-spacing:2px">HISTORY</span>
+                <button onclick="closeHistory()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:20px;line-height:1">✕</button>
+            </div>
+            <p style="font-size:12px;color:var(--muted);margin-bottom:4px">Click a run to reload it instantly — no re-processing needed.</p>
+            <div id="historyList"></div>
+        </div>
+        <div id="historyBackdrop" onclick="closeHistory()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:499"></div>
+
+        <script>
+            async function openHistory() {
+                const r = await fetch('/api/runs');
+                const runs = await r.json();
+                const list = document.getElementById('historyList');
+                if (!runs.length) {
+                    list.innerHTML = '<p style="color:var(--muted);font-size:13px;margin-top:8px">No previous runs yet. Run an analysis first.</p>';
+                } else {
+                    list.innerHTML = runs.map(run => `
+                        <div onclick="loadRun('${run.id}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;cursor:pointer;margin-bottom:8px;transition:border-color .15s"
+                            onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">
+                            <div style="font-size:13px;font-weight:500;color:var(--text)">${run.series_title || 'Untitled run'}</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:5px">${run.date} · ${run.video_count} video${run.video_count !== 1 ? 's' : ''} · ${run.short_count} short${run.short_count !== 1 ? 's' : ''} · ${run.provider}</div>
+                            <div style="font-size:11px;color:var(--muted);margin-top:3px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${run.trip_context || ''}</div>
+                        </div>`).join('');
+                }
+                document.getElementById('historyDrawer').style.right = '0';
+                document.getElementById('historyBackdrop').style.display = 'block';
+            }
+
+            function closeHistory() {
+                document.getElementById('historyDrawer').style.right = '-380px';
+                document.getElementById('historyBackdrop').style.display = 'none';
+            }
+
+            async function loadRun(id) {
+                const r = await fetch(`/api/runs/${id}`);
+                const data = await r.json();
+                planData = data;
+                renderPlan(data);
+                document.getElementById('emptyState').style.display = 'none';
+                document.getElementById('minnalSection').style.display = 'block';
+                closeHistory();
             }
         </script>
     </body>
