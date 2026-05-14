@@ -1220,6 +1220,7 @@
                     >
                         <span>📐</span>
                         <span id="opFormatLabel">YT Shorts</span>
+                        <span id="opDurLabel" style="color:var(--muted);font-size:11px"> · 45s</span>
                         <span style="color: var(--muted)">·</span>
                         <span id="opLookLabel">Natural</span>
                         <span
@@ -1232,7 +1233,40 @@
                     </button>
 
                     <div class="output-popover" id="outputPopover">
-                        <div class="settings-group-label">Format</div>
+
+                        <!-- Short Duration -->
+                        <div class="settings-group-label">Short Duration</div>
+                        <div class="slider-grid" style="margin-top:6px">
+                            <label>Target</label>
+                            <input type="range" id="op-duration" min="15" max="90" step="5" value="45"
+                                   oninput="syncDuration(this.value); saveOutputSettings()" />
+                            <span id="op-duration-val">45s</span>
+                        </div>
+                        <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                            How long each Short should be — AI will aim for this ±10s
+                        </div>
+
+                        <!-- Analysis Depth -->
+                        <div class="settings-group-label" style="margin-top:14px">Analysis Depth</div>
+                        <div class="format-row" style="margin-top:6px">
+                            <button class="fmt-pill" data-depth="fast"
+                                    onclick="setAnalysisDepth('fast')">
+                                Fast<br><small style="color:var(--muted)">3–7 frames</small>
+                            </button>
+                            <button class="fmt-pill active" data-depth="balanced"
+                                    onclick="setAnalysisDepth('balanced')">
+                                Balanced<br><small style="color:var(--muted)">5–12 frames</small>
+                            </button>
+                            <button class="fmt-pill" data-depth="deep"
+                                    onclick="setAnalysisDepth('deep')">
+                                Deep<br><small style="color:var(--muted)">10–20 · scene detect</small>
+                            </button>
+                        </div>
+                        <div style="font-size:10px;color:var(--muted);margin-top:2px">
+                            Deep uses scene-change detection to find action moments — slower but catches shots uniform sampling misses
+                        </div>
+
+                        <div class="settings-group-label" style="margin-top:14px">Format</div>
                         <div class="format-row">
                             <button
                                 class="fmt-pill active"
@@ -2304,6 +2338,19 @@
 
             // ── Output popover ──────────────────────────────────────────────────────────
 
+            let _analysisDepth = "balanced";
+
+            function syncDuration(val) {
+                document.getElementById("op-duration-val").textContent = val + "s";
+            }
+
+            function setAnalysisDepth(depth, save = true) {
+                _analysisDepth = depth;
+                document.querySelectorAll("[data-depth]").forEach(el =>
+                    el.classList.toggle("active", el.dataset.depth === depth));
+                if (save) saveOutputSettings();
+            }
+
             function toggleOutputPopover() {
                 const pop = document.getElementById("outputPopover");
                 const btn = document.getElementById("outputToggleBtn");
@@ -2339,6 +2386,12 @@
                                     `op-${k}-val`,
                                 ).textContent = vals[k];
                             });
+                            // Duration slider
+                            const dur = d.short_target_duration || 45;
+                            document.getElementById("op-duration").value = dur;
+                            syncDuration(dur);
+                            // Analysis depth pills
+                            setAnalysisDepth(d.analysis_depth || "balanced", /*save=*/false);
                             // Highlight matching preset pill (if any)
                             _highlightMatchingPreset(vals);
                             updateOutputLabel();
@@ -2426,19 +2479,15 @@
                 document.getElementById("opFormatLabel").textContent =
                     fmtNames[_outputFormat] || "YT Shorts";
 
-                const activePill = document.querySelector(
-                    ".preset-pill.active",
-                );
-                const presetText = activePill
-                    ? activePill.textContent.trim()
-                    : "Custom";
+                const dur = document.getElementById("op-duration")?.value || 45;
+                document.getElementById("opDurLabel").textContent = ` · ${dur}s`;
+
+                const activePill = document.querySelector(".preset-pill.active");
+                const presetText = activePill ? activePill.textContent.trim() : "Custom";
                 document.getElementById("opLookLabel").textContent = presetText;
 
-                const cropOn =
-                    document.getElementById("op-smart-crop")?.checked ?? true;
-                document.getElementById("opCropLabel").textContent = cropOn
-                    ? " · Crop ✓"
-                    : "";
+                const cropOn = document.getElementById("op-smart-crop")?.checked ?? true;
+                document.getElementById("opCropLabel").textContent = cropOn ? " · Crop ✓" : "";
             }
 
             async function saveOutputSettings() {
@@ -2457,6 +2506,9 @@
                             +document.getElementById("op-saturation").value,
                         filter_sharpness:
                             +document.getElementById("op-sharpness").value,
+                        short_target_duration:
+                            +document.getElementById("op-duration").value,
+                        analysis_depth: _analysisDepth,
                     }),
                 }).catch(() => {});
                 updateOutputLabel();

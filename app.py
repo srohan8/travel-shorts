@@ -61,14 +61,23 @@ ANTHROPIC_MODEL   = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001
 MINNAL_BASE    = "https://app.minnal.io"
 
 # Output / filter settings
-OUTPUT_FORMAT     = os.environ.get("OUTPUT_FORMAT", "shorts")   # shorts | reels | tiktok
-SMART_CROP        = os.environ.get("SMART_CROP", "true") == "true"
-FILTER_BRIGHTNESS = float(os.environ.get("FILTER_BRIGHTNESS", "0"))   # -50 to +50
-FILTER_CONTRAST   = float(os.environ.get("FILTER_CONTRAST",   "0"))   # -50 to +50
-FILTER_SATURATION = float(os.environ.get("FILTER_SATURATION", "0"))   # -50 to +50
-FILTER_SHARPNESS  = float(os.environ.get("FILTER_SHARPNESS",  "0"))   #   0 to 100
+OUTPUT_FORMAT          = os.environ.get("OUTPUT_FORMAT", "shorts")   # shorts | reels | tiktok
+SMART_CROP             = os.environ.get("SMART_CROP", "true") == "true"
+FILTER_BRIGHTNESS      = float(os.environ.get("FILTER_BRIGHTNESS", "0"))   # -50 to +50
+FILTER_CONTRAST        = float(os.environ.get("FILTER_CONTRAST",   "0"))   # -50 to +50
+FILTER_SATURATION      = float(os.environ.get("FILTER_SATURATION", "0"))   # -50 to +50
+FILTER_SHARPNESS       = float(os.environ.get("FILTER_SHARPNESS",  "0"))   #   0 to 100
+SHORT_TARGET_DURATION  = int(os.environ.get("SHORT_TARGET_DURATION", "45"))  # seconds per Short
+ANALYSIS_DEPTH         = os.environ.get("ANALYSIS_DEPTH", "balanced")  # fast | balanced | deep
 
 FORMAT_MAX_DURATION = {"shorts": 60, "reels": 90, "tiktok": 600}
+
+# Per-depth frame extraction config: scale (px wide), JPEG quality (lower=better), duration thresholds->frame count
+_DEPTH_CONFIG = {
+    "fast":     {"scale": 480, "quality": 4, "thresholds": [(30,3),(120,4),(300,5),(99999,7)]},
+    "balanced": {"scale": 640, "quality": 3, "thresholds": [(30,3),(120,5),(300,8),(99999,12)]},
+    "deep":     {"scale": 800, "quality": 2, "thresholds": [(30,5),(120,10),(300,16),(99999,20)]},
+}
 
 OUTPUT_DIR = _APP_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -204,68 +213,125 @@ def get_video_metadata(video_path):
         }
     return {"filename": Path(video_path).name, "duration": 0, "width": 0, "height": 0, "path": video_path}
 
+def _read_frame_at(video_path, timestamp, tmpdir, idx, scale, quality):
+    """Extract a single frame at the given timestamp. Returns frame dict or None."""
+    frame_path = os.path.join(tmpdir, f"frame_{idx}.jpg")
+    cmd = [
+        FFMPEG, "-ss", str(timestamp), "-i", video_path,
+        "-vframes", "1", f"-q:v", str(quality), "-vf", f"scale={scale}:-1",
+        frame_path, "-y", "-loglevel", "quiet"
+    ]
+    subprocess.run(cmd, capture_output=True)
+    if os.path.exists(frame_path):
+        with open(frame_path, "rb") as f:
+            return {
+                "timestamp": timestamp,
+                "timestamp_str": f"{int(timestamp//60)}:{int(timestamp%60):02d}",
+                "data": base64.b64encode(f.read()).decode()
+            }
+    return None
+
+
+def _extract_frames_scene_detect(video_path, duration, max_frames, scale, quality):
+    """Deep mode: extract frames at scene-change boundaries via FFmpeg scene filter.
+    Falls back to uniform sampling if scene detection finds too few transitions."""
+    frames = []
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Pass 1: detect scene-change timestamps (no frame writing, just metadata)
+        r = subprocess.run([
+            FFMPEG, "-i", video_path,
+            "-vf", "select='gt(scene,0.25)',showinfo",
+            "-vsync", "vfr", "-f", "null", "-"
+        ], capture_output=True, text=True, errors="replace")
+
+        scene_times = []
+        for line in r.stderr.splitlines():
+            if "showinfo" in line and "pts_time:" in line:
+                m = re.search(r'pts_time:(\d+\.?\d*)', line)
+                if m:
+                    t = float(m.group(1))
+                    # deduplicate scenes within 1s of each other
+                    if not scene_times or t - scene_times[-1] > 1.0:
+                        scene_times.append(t)
+
+        # If we got a useful set of scene times, sample from them
+        if len(scene_times) >= 3:
+            if len(scene_times) > max_frames:
+                step = len(scene_times) / max_frames
+                scene_times = [scene_times[int(i * step)] for i in range(max_frames)]
+        else:
+            # Not enough scene changes — fall back to uniform
+            scene_times = [(duration / (max_frames + 1)) * (i + 1) for i in range(max_frames)]
+
+        # Pass 2: extract frames at the selected timestamps
+        for i, ts in enumerate(scene_times):
+            frame = _read_frame_at(video_path, ts, tmpdir, i, scale, quality)
+            if frame:
+                frames.append(frame)
+
+    return frames
+
+
 def extract_frames(video_path, num_frames=None):
-    """Extract evenly spaced frames from video, scaling count with duration"""
+    """Extract frames from video, respecting the global ANALYSIS_DEPTH setting."""
     meta = get_video_metadata(video_path)
     duration = meta.get("duration", 60)
+
+    cfg = _DEPTH_CONFIG.get(ANALYSIS_DEPTH, _DEPTH_CONFIG["balanced"])
+    scale   = cfg["scale"]
+    quality = cfg["quality"]
+
     if num_frames is None:
-        if duration < 30:
-            num_frames = 3
-        elif duration < 120:
-            num_frames = 5
-        elif duration < 300:
-            num_frames = 8
-        else:
-            num_frames = 12
+        for threshold, count in cfg["thresholds"]:
+            if duration < threshold:
+                num_frames = count
+                break
+
+    # Deep mode uses scene-change detection
+    if ANALYSIS_DEPTH == "deep":
+        return _extract_frames_scene_detect(video_path, duration, num_frames, scale, quality)
+
+    # Fast / Balanced: uniform spacing
     frames = []
-    
     with tempfile.TemporaryDirectory() as tmpdir:
         for i in range(num_frames):
             timestamp = (duration / (num_frames + 1)) * (i + 1)
-            frame_path = os.path.join(tmpdir, f"frame_{i}.jpg")
-            cmd = [
-                FFMPEG, "-ss", str(timestamp), "-i", video_path,
-                "-vframes", "1", "-q:v", "3", "-vf", "scale=640:-1",
-                frame_path, "-y", "-loglevel", "quiet"
-            ]
-            subprocess.run(cmd, capture_output=True)
-            if os.path.exists(frame_path):
-                with open(frame_path, "rb") as f:
-                    frames.append({
-                        "timestamp": timestamp,
-                        "timestamp_str": f"{int(timestamp//60)}:{int(timestamp%60):02d}",
-                        "data": base64.b64encode(f.read()).decode()
-                    })
+            frame = _read_frame_at(video_path, timestamp, tmpdir, i, scale, quality)
+            if frame:
+                frames.append(frame)
     return frames
 
-ANALYZE_PROMPT = """You are a travel content analyst. Analyze these frames from a travel video.
+ANALYZE_PROMPT = """You are a travel content expert specialising in viral YouTube Shorts. Analyse these frames from a travel video and identify the most gripping, shareable moments.
 
 Trip context: {trip_context}
 Video file: {filename}
 
-For each frame, identify:
-- What is happening (scene description)
-- Location/setting (beach, city, restaurant, landmark, etc.)
-- Mood/energy (calm, exciting, funny, scenic, etc.)
-- YouTube Shorts potential (high/medium/low) and why
+For EACH frame provided, identify:
+- description: exactly what is visually happening RIGHT NOW — be specific (not "nice view", say "low drone shot skimming over green rice terraces at golden hour with mist in the valleys")
+- setting: one of: aerial, beach, city-street, food-restaurant, landmark-temple, nature-landscape, hotel-resort, market, adventure-activity, people-locals, transport, other
+- energy: one of: calm, exciting, dramatic, funny, tender, awe-inspiring
+- hook_potential: integer 1-10 (10 = irresistible opening frame — dramatic reveal, stunning visual, emotional reaction; 1 = filler/walking shot/establishing shot with nothing happening)
+- cut_type: "hero" (standout main moment worth 10-30 seconds of screen time) or "broll" (strong as a quick 2-4 second cut)
 
-Then suggest 1-3 specific clips from this video for YouTube Shorts, with:
-- Suggested start/end timestamps (estimate based on frame positions)
-- Short title (max 6 words)
-- Hook line (first sentence to grab attention)
-- Caption (2-3 sentences)
-- 5 hashtags
+Then, based on ALL frames together, suggest 1-3 specific clips for YouTube Shorts:
+- Only suggest clips where at least one scene has hook_potential >= 6
+- Use the provided frame timestamps to estimate start/end times — be precise
+- Open each clip on the frame with the highest hook_potential
+- Title: max 6 words
+- Hook: single gripping opening line (not generic — reference the specific moment)
+- Caption: 2-3 sentences that pay off the hook
+- 5 relevant hashtags
 
-Respond in this exact JSON format:
+Output ONLY valid JSON — no markdown fences, no explanation before or after:
 {{
   "scenes": [
-    {{"timestamp": "0:30", "description": "...", "setting": "...", "mood": "...", "shorts_potential": "high/medium/low"}}
+    {{"timestamp": "0:30", "description": "...", "setting": "...", "energy": "...", "hook_potential": 8, "cut_type": "hero"}}
   ],
   "suggested_clips": [
     {{
       "title": "...",
-      "start_time": "0:00",
-      "end_time": "0:30",
+      "start_time": "0:28",
+      "end_time": "1:05",
       "hook": "...",
       "caption": "...",
       "hashtags": ["#travel", "#..."],
@@ -278,56 +344,10 @@ Respond in this exact JSON format:
 def analyze_video_with_gemini(video_path, trip_context, frames):
     """Send frames to Gemini for analysis"""
     client = google_genai.Client(api_key=GEMINI_API_KEY)
-    
-    parts = []
-    parts.append(f"""You are a travel content analyst. Analyze these frames from a travel video.
 
-Trip context: {trip_context}
-Video file: {Path(video_path).name}
-
-For each frame, identify:
-- What is happening (scene description)
-- Location/setting (beach, city, restaurant, landmark, etc.)
-- Mood/energy (calm, exciting, funny, scenic, etc.)
-- YouTube Shorts potential (high/medium/low) and why
-
-Then suggest 1-3 specific clips from this video for YouTube Shorts, with:
-- Suggested start/end timestamps (estimate based on frame positions)
-- Short title (max 6 words)
-- Hook line (first sentence to grab attention)
-- Caption (2-3 sentences)
-- 5 hashtags
-
-Respond in this exact JSON format:
-{{
-  "scenes": [
-    {{"timestamp": "0:30", "description": "...", "setting": "...", "mood": "...", "shorts_potential": "high/medium/low"}}
-  ],
-  "suggested_clips": [
-    {{
-      "title": "...",
-      "start_time": "0:00",
-      "end_time": "0:30",
-      "hook": "...",
-      "caption": "...",
-      "hashtags": ["#travel", "#..."],
-      "why": "..."
-    }}
-  ]
-}}""")
-    
-    for i, frame in enumerate(frames):
-        img_data = base64.b64decode(frame["data"])
-        parts.append({
-            "inline_data": {
-                "mime_type": "image/jpeg",
-                "data": frame["data"]
-            }
-        })
-        parts.append(f"[Frame at {frame['timestamp_str']}]")
-    
-    prompt_parts = [parts[0]]
-    for i, frame in enumerate(frames):
+    prompt_text = ANALYZE_PROMPT.format(trip_context=trip_context, filename=Path(video_path).name)
+    prompt_parts = [prompt_text]
+    for frame in frames:
         img = Image.open(io.BytesIO(base64.b64decode(frame["data"])))
         prompt_parts.append(f"\n[Frame at {frame['timestamp_str']}]:")
         prompt_parts.append(img)
@@ -425,41 +445,7 @@ def generate_shorts_plan(all_analyses, trip_context, video_metas, vibe="cinemati
     return {"shorts": [], "raw": text}
 
 def analyze_video_with_ollama(video_path, trip_context, frames):
-    prompt = f"""You are a travel content analyst. Analyze these frames from a travel video.
-
-Trip context: {trip_context}
-Video file: {Path(video_path).name}
-
-For each frame, identify:
-- What is happening (scene description)
-- Location/setting (beach, city, restaurant, landmark, etc.)
-- Mood/energy (calm, exciting, funny, scenic, etc.)
-- YouTube Shorts potential (high/medium/low) and why
-
-Then suggest 1-3 specific clips from this video for YouTube Shorts, with:
-- Suggested start/end timestamps (estimate based on frame positions)
-- Short title (max 6 words)
-- Hook line (first sentence to grab attention)
-- Caption (2-3 sentences)
-- 5 hashtags
-
-Respond in this exact JSON format:
-{{
-  "scenes": [
-    {{"timestamp": "0:30", "description": "...", "setting": "...", "mood": "...", "shorts_potential": "high/medium/low"}}
-  ],
-  "suggested_clips": [
-    {{
-      "title": "...",
-      "start_time": "0:00",
-      "end_time": "0:30",
-      "hook": "...",
-      "caption": "...",
-      "hashtags": ["#travel", "#..."],
-      "why": "..."
-    }}
-  ]
-}}"""
+    prompt = ANALYZE_PROMPT.format(trip_context=trip_context, filename=Path(video_path).name)
 
     client = ollama_client.Client(host=OLLAMA_HOST)
     response = client.chat(
@@ -530,7 +516,7 @@ Hook structure: Each hook should be a setup in the first line that pays off in t
 
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. Exactly {target_count} YouTube Shorts — you MUST output all {target_count}, no fewer. Spread coverage across all source videos and use every good clip in the pool. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of 30-60 seconds per Short. Only use one segment if that single clip is already 30+ seconds and is a standout moment.
+2. Exactly {target_count} YouTube Shorts — you MUST output all {target_count}, no fewer. Spread coverage across all source videos and use every good clip in the pool. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of approximately {SHORT_TARGET_DURATION} seconds per Short (±10 seconds). Only use one segment if that single clip is already {SHORT_TARGET_DURATION // 2}+ seconds and is a standout moment.
 3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
 
@@ -1159,12 +1145,14 @@ def get_settings():
         "openai_model":     OPENAI_MODEL,
         "anthropic_key_set": bool(ANTHROPIC_API_KEY),
         "anthropic_model":  ANTHROPIC_MODEL,
-        "output_format":    OUTPUT_FORMAT,
-        "smart_crop":       SMART_CROP,
-        "filter_brightness": FILTER_BRIGHTNESS,
-        "filter_contrast":   FILTER_CONTRAST,
-        "filter_saturation": FILTER_SATURATION,
-        "filter_sharpness":  FILTER_SHARPNESS,
+        "output_format":         OUTPUT_FORMAT,
+        "smart_crop":            SMART_CROP,
+        "filter_brightness":     FILTER_BRIGHTNESS,
+        "filter_contrast":       FILTER_CONTRAST,
+        "filter_saturation":     FILTER_SATURATION,
+        "filter_sharpness":      FILTER_SHARPNESS,
+        "short_target_duration": SHORT_TARGET_DURATION,
+        "analysis_depth":        ANALYSIS_DEPTH,
     })
 
 @app.route("/api/settings", methods=["POST"])
@@ -1172,6 +1160,7 @@ def save_settings():
     global GEMINI_API_KEY, AI_PROVIDER, OLLAMA_MODEL, OLLAMA_HOST, MINNAL_API_KEY
     global OPENAI_API_KEY, OPENAI_MODEL, ANTHROPIC_API_KEY, ANTHROPIC_MODEL
     global OUTPUT_FORMAT, SMART_CROP, FILTER_BRIGHTNESS, FILTER_CONTRAST, FILTER_SATURATION, FILTER_SHARPNESS
+    global SHORT_TARGET_DURATION, ANALYSIS_DEPTH
     data = request.json or {}
 
     def _set(key, val):
@@ -1224,6 +1213,12 @@ def save_settings():
     if "filter_sharpness" in data:
         FILTER_SHARPNESS = float(data["filter_sharpness"])
         _set("FILTER_SHARPNESS", FILTER_SHARPNESS)
+    if "short_target_duration" in data:
+        SHORT_TARGET_DURATION = int(data["short_target_duration"])
+        _set("SHORT_TARGET_DURATION", SHORT_TARGET_DURATION)
+    if "analysis_depth" in data:
+        ANALYSIS_DEPTH = data["analysis_depth"]
+        _set("ANALYSIS_DEPTH", ANALYSIS_DEPTH)
 
     return jsonify({"ok": True})
 
