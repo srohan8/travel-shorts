@@ -812,19 +812,52 @@ def set_api_key():
 
 @app.route("/api/browse-folder")
 def browse_folder():
-    """Open a native OS folder-picker dialog and return the selected path."""
+    """Open a native OS folder-picker dialog and return the selected path.
+    Uses PowerShell on Windows, osascript on macOS, zenity on Linux — avoids
+    tkinter threading issues with Flask's threaded dev server."""
+    import platform
+    system = platform.system()
+    path = ""
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes("-topmost", True)
-        path = filedialog.askdirectory(title="Select your video folder")
-        root.destroy()
-        return jsonify({"path": path or ""})
-    except Exception as e:
-        # tkinter unavailable (headless server) — return empty path gracefully
-        return jsonify({"path": "", "error": str(e)})
+        if system == "Windows":
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Add-Type -AssemblyName System.Windows.Forms; "
+                 "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                 "$d.Description = 'Select your video folder'; "
+                 "$null = $d.ShowDialog(); "
+                 "Write-Output $d.SelectedPath"],
+                capture_output=True, text=True, timeout=120
+            )
+            path = r.stdout.strip()
+        elif system == "Darwin":
+            r = subprocess.run(
+                ["osascript", "-e",
+                 'POSIX path of (choose folder with prompt "Select your video folder")'],
+                capture_output=True, text=True, timeout=120
+            )
+            path = r.stdout.strip().rstrip("/")
+        else:
+            # Linux: try zenity first, fall back to tkinter
+            r = subprocess.run(
+                ["zenity", "--file-selection", "--directory",
+                 "--title=Select your video folder"],
+                capture_output=True, text=True, timeout=120
+            )
+            path = r.stdout.strip()
+    except Exception:
+        # Last-resort: tkinter (may not work on all systems from a thread)
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            root = tk.Tk()
+            root.withdraw()
+            root.wm_attributes("-topmost", True)
+            path = filedialog.askdirectory(title="Select your video folder")
+            root.destroy()
+        except Exception:
+            pass
+    return jsonify({"path": path or ""})
 
 
 @app.route("/api/scan-folder", methods=["POST"])
