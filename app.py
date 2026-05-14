@@ -87,7 +87,7 @@ def _load_cache(video_path):
     p = CACHE_DIR / f"{_cache_key(video_path)}.json"
     if p.exists():
         try:
-            with open(p) as f:
+            with open(p, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return None
@@ -96,10 +96,56 @@ def _load_cache(video_path):
 def _save_cache(video_path, analysis):
     p = CACHE_DIR / f"{_cache_key(video_path)}.json"
     try:
-        with open(p, "w") as f:
+        with open(p, "w", encoding="utf-8") as f:
             json.dump(analysis, f, indent=2)
     except Exception:
         pass
+
+# ── Run history helpers ───────────────────────────────────────────────────────
+
+def _save_run(result, trip_context, video_count, plan):
+    """Save a timestamped run to output/runs/. Never raises — silently logs on error."""
+    import datetime
+    try:
+        run_id  = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+        run_dir = OUTPUT_DIR / "runs" / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with open(run_dir / "analysis.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, indent=2)
+        meta = {
+            "id":           run_id,
+            "date":         run_id,
+            "trip_context": (trip_context or "")[:120],
+            "video_count":  video_count,
+            "short_count":  len(plan.get("shorts", [])),
+            "series_title": plan.get("series_title", ""),
+            "provider":     AI_PROVIDER,
+        }
+        with open(run_dir / "meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f)
+    except Exception as e:
+        print(f"[warn] Could not save run history: {e}")
+
+
+def _migrate_existing_analysis():
+    """If output/analysis.json exists but output/runs/ is empty, create a run entry for it."""
+    try:
+        existing = OUTPUT_DIR / "analysis.json"
+        if not existing.exists():
+            return
+        runs_dir = OUTPUT_DIR / "runs"
+        if runs_dir.exists() and any(runs_dir.iterdir()):
+            return  # already have runs
+        with open(existing, encoding="utf-8") as f:
+            saved = json.load(f)
+        plan     = saved.get("plan", {})
+        analyses = saved.get("analyses", [])
+        _save_run(saved, "", len(analyses), plan)
+        print("[info] Migrated existing analysis.json -> output/runs/")
+    except Exception as e:
+        print(f"[warn] Migration skipped: {e}")
+
+_migrate_existing_analysis()
 
 # ── Last-run analyses storage (for plan regeneration without re-analysis) ─────
 _last_all_analyses = []
@@ -901,27 +947,12 @@ def analyze():
 
         result = {"analyses": all_analyses, "plan": plan}
 
-        with open(OUTPUT_DIR / "analysis.json", "w") as f:
+        with open(OUTPUT_DIR / "analysis.json", "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
 
-        # Save timestamped run so users can reload without re-running
-        import datetime
-        run_id  = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-        run_dir = OUTPUT_DIR / "runs" / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        with open(run_dir / "analysis.json", "w") as f:
-            json.dump(result, f, indent=2)
-        meta = {
-            "id":           run_id,
-            "date":         run_id,
-            "trip_context": trip_context[:120],
-            "video_count":  len(videos),
-            "short_count":  len(plan.get("shorts", [])),
-            "series_title": plan.get("series_title", ""),
-            "provider":     AI_PROVIDER,
-        }
-        with open(run_dir / "meta.json", "w") as f:
-            json.dump(meta, f)
+        # Save timestamped run — wrapped separately so a save failure never
+        # kills the HTTP response the user is waiting for
+        _save_run(result, trip_context, len(videos), plan)
 
         return jsonify(result)
     except Exception as e:
@@ -937,7 +968,7 @@ def list_runs():
     for d in sorted(runs_dir.iterdir(), reverse=True):
         meta_path = d / "meta.json"
         if meta_path.exists():
-            with open(meta_path) as f:
+            with open(meta_path, encoding="utf-8") as f:
                 runs.append(json.load(f))
     return jsonify(runs)
 
@@ -946,7 +977,7 @@ def get_run(run_id):
     p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
     if not p.exists():
         return jsonify({"error": "Run not found"}), 404
-    with open(p) as f:
+    with open(p, encoding="utf-8") as f:
         return jsonify(json.load(f))
 
 
@@ -966,7 +997,7 @@ def regenerate_plan():
     if run_id:
         p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
         if p.exists():
-            with open(p) as f:
+            with open(p, encoding="utf-8") as f:
                 saved = json.load(f)
             all_analyses = saved.get("analyses", [])
 
@@ -976,7 +1007,7 @@ def regenerate_plan():
     if all_analyses is None:
         p = OUTPUT_DIR / "analysis.json"
         if p.exists():
-            with open(p) as f:
+            with open(p, encoding="utf-8") as f:
                 saved = json.load(f)
             all_analyses = saved.get("analyses", [])
 
@@ -1018,25 +1049,9 @@ def regenerate_plan():
 
         result = {"analyses": all_analyses, "plan": plan}
 
-        # Save as a new timestamped run
-        import datetime
-        new_run_id = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-        run_dir = OUTPUT_DIR / "runs" / new_run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        with open(run_dir / "analysis.json", "w") as f:
+        with open(OUTPUT_DIR / "analysis.json", "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
-        with open(run_dir / "meta.json", "w") as f:
-            json.dump({
-                "id":           new_run_id,
-                "date":         new_run_id,
-                "trip_context": trip_context[:120] if trip_context else "",
-                "video_count":  len(all_analyses),
-                "short_count":  len(plan.get("shorts", [])),
-                "series_title": plan.get("series_title", ""),
-                "provider":     AI_PROVIDER,
-            }, f)
-        with open(OUTPUT_DIR / "analysis.json", "w") as f:
-            json.dump(result, f, indent=2)
+        _save_run(result, trip_context or "", len(all_analyses), plan)
 
         return jsonify(result)
 
