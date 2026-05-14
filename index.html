@@ -1142,12 +1142,22 @@
                 <div>
                     <div class="section-label">02 — Video Folder</div>
                     <div class="field">
-                        <label>Folder path (absolute)</label>
-                        <input
-                            type="text"
-                            id="folderPath"
-                            placeholder="C:\Videos\Bali2026 or /home/user/videos"
-                        />
+                        <label>Folder path</label>
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <input
+                                type="text"
+                                id="folderPath"
+                                placeholder="C:\Videos\Bali2026 or /home/user/videos"
+                                style="flex:1;min-width:0"
+                                onkeydown="if(event.key==='Enter') scanFolder()"
+                            />
+                            <button
+                                class="btn btn-secondary"
+                                id="browseBtn"
+                                onclick="browseFolder()"
+                                style="width:auto;padding:6px 14px;white-space:nowrap;flex-shrink:0"
+                            >Browse…</button>
+                        </div>
                     </div>
                     <button
                         class="btn btn-secondary"
@@ -1208,6 +1218,9 @@
                         </div>
                     </div>
                     <div class="video-list" id="videoList"></div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:6px">
+                        Click to toggle · Shift+click to range-select · Drag to sweep-select
+                    </div>
                 </div>
 
                 <!-- Step 04 — Output settings (popover) -->
@@ -1663,41 +1676,85 @@
                 }
             }
 
+            // ── Video list selection state ──────────────────────────────────────────────
+            let _anchorIdx    = -1;   // last non-shift click — used for shift range
+            let _dragActive   = false;
+            let _dragSetTo    = true; // what value drag is applying (select or deselect)
+
+            document.addEventListener("mouseup", () => { _dragActive = false; });
+
+            function _applyOne(idx, select) {
+                const v = videos[idx];
+                if (!v) return;
+                if (select) selectedVideos.add(v.path);
+                else        selectedVideos.delete(v.path);
+                const item = document.querySelector(`.video-item[data-idx="${idx}"]`);
+                if (item) {
+                    item.classList.toggle("selected", select);
+                    const cb = item.querySelector("input[type=checkbox]");
+                    if (cb) cb.checked = select;
+                }
+            }
+
             function renderVideoList() {
                 const list = document.getElementById("videoList");
                 list.innerHTML = "";
-                videos.forEach((v) => {
+                videos.forEach((v, idx) => {
                     const item = document.createElement("div");
-                    item.className =
-                        "video-item" +
-                        (selectedVideos.has(v.path) ? " selected" : "");
+                    item.className = "video-item" + (selectedVideos.has(v.path) ? " selected" : "");
+                    item.dataset.idx = idx;
                     item.innerHTML = `
-        <input type="checkbox" ${selectedVideos.has(v.path) ? "checked" : ""} onchange="toggleVideo('${v.path}', this.checked)">
-        <div class="video-info">
-          <div class="video-name">${v.filename}</div>
-          <div class="video-meta">${v.duration_str || "?"} · ${v.size_mb || "?"} MB · ${(v.creation_time || "").slice(0, 10) || "unknown date"}</div>
-        </div>
-      `;
-                    item.onclick = (e) => {
-                        if (e.target.type !== "checkbox") {
-                            const cb = item.querySelector("input");
-                            cb.checked = !cb.checked;
-                            toggleVideo(v.path, cb.checked);
+                        <input type="checkbox" ${selectedVideos.has(v.path) ? "checked" : ""}>
+                        <div class="video-info">
+                            <div class="video-name">${v.filename}</div>
+                            <div class="video-meta">${v.duration_str || "?"} · ${v.size_mb || "?"} MB · ${(v.creation_time || "").slice(0, 10) || "unknown date"}</div>
+                        </div>`;
+
+                    // Checkbox change (direct click on checkbox)
+                    item.querySelector("input").addEventListener("change", (e) => {
+                        _applyOne(idx, e.target.checked);
+                        _anchorIdx = idx;
+                        updateVideoCount();
+                        checkAnalyzeBtn();
+                    });
+
+                    // Mousedown — start drag or handle shift+click
+                    item.addEventListener("mousedown", (e) => {
+                        if (e.target.type === "checkbox") return;
+                        e.preventDefault(); // prevent text selection while dragging
+                        const nowSelected = selectedVideos.has(v.path);
+
+                        if (e.shiftKey && _anchorIdx >= 0) {
+                            // Shift+click: range-select from anchor to here (always selects)
+                            const [lo, hi] = [Math.min(_anchorIdx, idx), Math.max(_anchorIdx, idx)];
+                            for (let i = lo; i <= hi; i++) _applyOne(i, true);
+                        } else {
+                            // Normal click: toggle this item and start a drag
+                            _dragSetTo  = !nowSelected;
+                            _dragActive = true;
+                            _anchorIdx  = idx;
+                            _applyOne(idx, _dragSetTo);
                         }
-                    };
+                        updateVideoCount();
+                        checkAnalyzeBtn();
+                    });
+
+                    // Mouseover — extend drag selection
+                    item.addEventListener("mouseover", () => {
+                        if (!_dragActive) return;
+                        _applyOne(idx, _dragSetTo);
+                        updateVideoCount();
+                        checkAnalyzeBtn();
+                    });
+
                     list.appendChild(item);
                 });
             }
 
             function toggleVideo(path, checked) {
                 if (checked) selectedVideos.add(path);
-                else selectedVideos.delete(path);
-                document.querySelectorAll(".video-item").forEach((el, i) => {
-                    el.classList.toggle(
-                        "selected",
-                        selectedVideos.has(videos[i].path),
-                    );
-                });
+                else         selectedVideos.delete(path);
+                renderVideoList();
                 checkAnalyzeBtn();
             }
 
@@ -1710,6 +1767,26 @@
                 selectedVideos.clear();
                 renderVideoList();
                 checkAnalyzeBtn();
+            }
+
+            // ── Browse folder ───────────────────────────────────────────────────────────
+            async function browseFolder() {
+                const btn = document.getElementById("browseBtn");
+                const orig = btn.textContent;
+                btn.textContent = "…";
+                btn.disabled = true;
+                try {
+                    const r = await fetch("/api/browse-folder");
+                    const d = await r.json();
+                    if (d.path) {
+                        document.getElementById("folderPath").value = d.path;
+                        scanFolder();
+                    }
+                } catch { /* user cancelled or tkinter unavailable — silently ignore */ }
+                finally {
+                    btn.textContent = orig;
+                    btn.disabled = false;
+                }
             }
 
             function updateVideoCount() {

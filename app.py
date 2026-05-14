@@ -810,6 +810,23 @@ def set_api_key():
     GEMINI_API_KEY = data.get("api_key", "")
     return jsonify({"ok": True})
 
+@app.route("/api/browse-folder")
+def browse_folder():
+    """Open a native OS folder-picker dialog and return the selected path."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes("-topmost", True)
+        path = filedialog.askdirectory(title="Select your video folder")
+        root.destroy()
+        return jsonify({"path": path or ""})
+    except Exception as e:
+        # tkinter unavailable (headless server) — return empty path gracefully
+        return jsonify({"path": "", "error": str(e)})
+
+
 @app.route("/api/scan-folder", methods=["POST"])
 def scan_folder():
     data = request.json
