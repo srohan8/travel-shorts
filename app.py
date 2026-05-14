@@ -516,7 +516,7 @@ Hook structure: Each hook should be a setup in the first line that pays off in t
 
 Create a content strategy with:
 1. Overall trip narrative (2-3 sentences)
-2. Exactly {target_count} YouTube Shorts — you MUST output all {target_count}, no fewer. Spread coverage across all source videos and use every good clip in the pool. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Aim for a total combined duration of approximately {SHORT_TARGET_DURATION} seconds per Short (±10 seconds). Only use one segment if that single clip is already {SHORT_TARGET_DURATION // 2}+ seconds and is a standout moment.
+2. Exactly {target_count} YouTube Shorts — you MUST output all {target_count}, no fewer. Spread coverage across all source videos and use every good clip in the pool. Each Short should be a mini-montage of 2-4 segments from different moments or different source videos, stitched into one cohesive clip. Each Short must be at least {SHORT_TARGET_DURATION} seconds total — aim for {SHORT_TARGET_DURATION}–{SHORT_TARGET_DURATION + 20} seconds. Add more segments if needed to reach the minimum. Only use one segment if that single clip is already {SHORT_TARGET_DURATION}+ seconds and is a standout moment.
 3. Posting schedule suggestion (one post per day or every other day)
 4. Series title and theme
 
@@ -1021,34 +1021,39 @@ def get_run(run_id):
 def regenerate_plan():
     """Regenerate the shorts plan from existing per-video analyses — no re-analysis needed."""
     global _last_all_analyses, _last_video_metas, _last_trip_context
-    data = request.json or {}
-    vibe   = data.get("vibe", "cinematic")
-    run_id = data.get("run_id")   # optional — if from history drawer
+    try:
+        data = request.json or {}
+        vibe   = data.get("vibe", "cinematic")
+        run_id = data.get("run_id")   # optional — if from history drawer
 
-    # Resolve which analyses to use (priority: run_id → last in-memory → output/analysis.json)
-    all_analyses = None
-    trip_context = _last_trip_context
-    video_metas  = _last_video_metas
+        # Resolve which analyses to use (priority: run_id → last in-memory → output/analysis.json)
+        all_analyses = None
+        trip_context = _last_trip_context
+        video_metas  = _last_video_metas
 
-    if run_id:
-        p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
-        if p.exists():
-            with open(p, encoding="utf-8") as f:
-                saved = json.load(f)
-            all_analyses = saved.get("analyses", [])
+        if run_id:
+            p = OUTPUT_DIR / "runs" / run_id / "analysis.json"
+            if p.exists():
+                with open(p, encoding="utf-8") as f:
+                    saved = json.load(f)
+                all_analyses = saved.get("analyses", [])
 
-    if all_analyses is None and _last_all_analyses:
-        all_analyses = _last_all_analyses
+        if all_analyses is None and _last_all_analyses:
+            all_analyses = _last_all_analyses
 
-    if all_analyses is None:
-        p = OUTPUT_DIR / "analysis.json"
-        if p.exists():
-            with open(p, encoding="utf-8") as f:
-                saved = json.load(f)
-            all_analyses = saved.get("analyses", [])
+        if all_analyses is None:
+            p = OUTPUT_DIR / "analysis.json"
+            if p.exists():
+                with open(p, encoding="utf-8") as f:
+                    saved = json.load(f)
+                all_analyses = saved.get("analyses", [])
 
-    if not all_analyses:
-        return jsonify({"error": "No analysis data found — run Analyze first"}), 400
+        if not all_analyses:
+            return jsonify({"error": "No analysis data found — run Analyze first"}), 400
+
+    except Exception as e:
+        log(f"Regenerate-plan setup error: {e}")
+        return jsonify({"error": str(e)}), 500
 
     try:
         log(f"Regenerating plan for {len(all_analyses)} videos (vibe: {vibe})...")
